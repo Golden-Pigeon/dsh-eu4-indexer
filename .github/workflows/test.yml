@@ -1,0 +1,37 @@
+name: local-package-tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      EU4INDEXER_HOME: ${{ runner.temp }}/eu4-indexer-rules
+      EU4_CONFIG_DIR: ${{ runner.temp }}/eu4-indexer-rules/config/eu4
+      HOI4_CONFIG_DIR: ${{ runner.temp }}/eu4-indexer-rules/config/hoi4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - run: npm ci
+      - run: dotnet run --project external/eu4-indexer/Eu4Indexer.Cli -- setup
+      - run: npm run test:upstream
+      - run: npm run check
+      - run: npm run build:engine
+      - name: Select self-contained engine
+        shell: bash
+        run: node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path'; import {rid} from './src/engine/runtime.js'; fs.appendFileSync(process.env.GITHUB_ENV,'DSH_EU4_ENGINE='+path.resolve('artifacts/engine',rid(),'bin',process.platform==='win32'?'eu4indexer.exe':'eu4indexer')+'\n')"
+      - run: npm run test:integration
+      - run: npm pack

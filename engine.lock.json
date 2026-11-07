@@ -1,0 +1,13 @@
+{
+  "apiVersion": 1,
+  "source": "https://github.com/Golden-Pigeon/eu4-indexer.git",
+  "sourceCommit": "7fe7897c187088642a3d95101a3c64b8dcc3e579",
+  "releaseRepository": "Golden-Pigeon/dsh-eu4-indexer",
+  "assets": {
+    "osx-arm64": {
+      "file": "eu4indexer-osx-arm64.tar.gz",
+      "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer/releases/download/v0.1.0/eu4indexer-osx-arm64.tar.gz",
+      "sha256": "bd2185fe3109af955dd97d41d2f64e6da80d7522a3343f528dee21306ac9eefe"
+    }
+  }
+}

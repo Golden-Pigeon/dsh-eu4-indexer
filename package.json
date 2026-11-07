@@ -1,0 +1,73 @@
+{
+  "name": "dsh-eu4-indexer",
+  "version": "0.1.0",
+  "description": "Manage and query EU4 and HOI4 game and mod indexes in DeepSeek Harness, with isolated query sessions.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Golden-Pigeon",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "resources",
+    "locale",
+    "cordis.patch.yml",
+    "engine.lock.json",
+    "README.md",
+    "LICENSE",
+    "docs",
+    "CHANGELOG.md"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=24",
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-mcp-client": ">=0.2.2-rc.1 <0.3.0",
+    "@deepseek-ai/schemastery": "~3.19.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:engine": "node scripts/build-engine.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:integration": "node --test tests/integration/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "preview": "node scripts/preview.mjs",
+    "prepack": "node scripts/build.mjs --bundle-engine",
+    "test:upstream": "dotnet test external/eu4-indexer/Eu4Indexer.slnx --disable-build-servers -p:UseSharedCompilation=false"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-mcp-client": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-skill": "0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "^3.19.0",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.56.1",
+    "prettier": "3.8.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer.git"
+  }
+}

@@ -1,0 +1,3 @@
+[submodule "external/eu4-indexer"]
+	path = external/eu4-indexer
+	url = https://github.com/Golden-Pigeon/eu4-indexer.git
