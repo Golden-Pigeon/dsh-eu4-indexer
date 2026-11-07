@@ -74,7 +74,7 @@ window.__ModuleLoader__.load({
       taskId: '任务',
       sourceCount: '来源',
       parseErrors: '解析错误',
-      language: '技能语言由插件配置 language 设置（zh / en）。',
+      language: '模型根据当前对话自动选择中英文技能，与界面语言无关。',
       unload: '宿主重启会将未完成任务标为中断，重新执行即可。',
       manual: '不使用模组集',
       choose: '请选择索引',
@@ -171,7 +171,7 @@ window.__ModuleLoader__.load({
       sourceCount: 'sources',
       parseErrors: 'parse errors',
       language:
-        'The plugin language setting selects the skill language (zh / en).',
+        'The model chooses Chinese or English skills from the conversation, independently of the UI language.',
       unload:
         'A host restart marks unfinished tasks interrupted. Submit them again to retry.',
       deleteHint:

@@ -1,5 +1,5 @@
 ---
-name: hoi4
+name: hoi4-en
 description: >
   Query and reason over a Hearts of Iron IV (HOI4) script index through the
   `eu4` MCP server: explain national focuses, events, decisions, and ideas and
@@ -10,6 +10,11 @@ description: >
   ideas, country leaders, modifiers, flags, mod overrides, localisation — or
   asks "how do I achieve X", "why can't I do Y", or "is this a bug".
 ---
+
+## DSH skill language selection
+
+Select `hoi4-en` yourself for English conversation, or as the available fallback for languages without a translation. Choose `hoi4-zh` when the user is conversing in Chinese, regardless of UI language or the legacy plugin language setting; no explicit language request is needed. Code, identifiers, paths and quoted foreign text do not by themselves change conversational language. Load one translation at a time. If the user switches language, load the matching translation and use its language and terminology guidance in place of the previous version. Answer in the user's current language.
+
 
 # HOI4 Indexer
 

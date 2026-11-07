@@ -22,7 +22,12 @@ export const Config = z.object({
     .description(
       'Optional external eu4indexer executable supporting management API 1.',
     ),
-  language: z.union(['zh', 'en']).default('zh'),
+  language: z
+    .union(['auto', 'zh', 'en'])
+    .default('auto')
+    .description(
+      'Deprecated compatibility field; the model selects the skill translation from the conversation, regardless of this value.',
+    ),
   concurrency: z.number().min(1).max(8).default(2),
   timeoutMs: z.number().min(1000).max(300000).default(30000),
   toolCallTimeoutMs: z.number().min(1000).max(600000).default(60000),
@@ -44,7 +49,7 @@ export async function apply(ctx, config) {
     await service.stop()
     await sessions.stop()
   })
-  await registerSkills(ctx, config.language)
+  await registerSkills(ctx)
   ctx.inject(['connection'], (ctx) => {
     ctx.connection.rpc.intercept(
       '/api',

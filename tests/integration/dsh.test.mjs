@@ -6,7 +6,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import Tools from '@deepseek-ai/dsh-tools'
-import Skills from '@deepseek-ai/dsh-skill'
+import Skills, { isModelInvocable } from '@deepseek-ai/dsh-skill'
+import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import * as Plugin from '../../src/index.js'
 import { Engine } from '../../src/engine/runtime.js'
@@ -60,6 +61,9 @@ test(
       })
       handles.push(ctx.plugin(Skills))
       await handles.at(-1).await()
+      ctx.provide('workingDirectory', { ensure: async () => home })
+      handles.push(ctx.plugin(ToolSkill))
+      await handles.at(-1).await()
       const disposeConnection = ctx.provide('connection', {
         rpc: {
           intercept(route, predicate, handler) {
@@ -79,17 +83,48 @@ test(
         agent.ctx = scope.ctx
         agents.set(id, agent)
       }
-      const plugin = ctx.plugin(Plugin, { home, executablePath: executable })
+      const plugin = ctx.plugin(Plugin, {
+        home,
+        executablePath: executable,
+        language: 'en',
+      })
       handles.push(plugin)
       await plugin.await()
       const skills = await ctx.get('skills').list()
-      assert.equal(skills.length, 2)
+      assert.equal(skills.length, 6)
+      assert.deepEqual(
+        skills.filter(isModelInvocable).map((s) => s.name),
+        ['eu4-en', 'eu4-zh', 'hoi4-en', 'hoi4-zh'],
+      )
       for (const skill of skills)
         assert.ok(
           (await ctx.get('skills').get(skill.name)).content.includes(
             'eu4_indexer_manage',
           ),
         )
+      const loadSkill = (id, name) =>
+        ctx
+          .get('tools')
+          .get('skill', agents.get(id))
+          .execute(
+            { name },
+            { agent: agents.get(id), signal: new AbortController().signal },
+          )
+      const [chinese, english] = await Promise.all([
+        loadSkill('one', 'eu4-zh'),
+        loadSkill('two', 'eu4-en'),
+      ])
+      assert.match(chinese.content, /## 游戏简介/)
+      assert.match(english.content, /## About Europa/)
+      assert.match(
+        (await loadSkill('one', 'eu4-en')).content,
+        /## About Europa/,
+      )
+      assert.match((await loadSkill('two', 'eu4-zh')).content, /## 游戏简介/)
+      await assert.rejects(
+        loadSkill('one', 'eu4'),
+        /not available for model invocation/,
+      )
       const forbidden = await rpc(
         'eu4-indexer/dispatch',
         { operation: 'state' },
@@ -147,9 +182,17 @@ test(
       assert.equal(tool(agents.get('two'), 'read_query'), undefined)
       assert.equal((await ctx.get('skills').list()).length, 0)
       disposeConnection()
-      const headless = ctx.plugin(Plugin, { home, executablePath: executable })
+      const headless = ctx.plugin(Plugin, {
+        home,
+        executablePath: executable,
+        language: 'zh',
+      })
       handles.push(headless)
       await headless.await()
+      assert.match(
+        (await ctx.get('skills').get('eu4-en')).content,
+        /## About Europa/,
+      )
       assert.ok(
         ctx
           .get('tools')

@@ -1,5 +1,5 @@
 ---
-name: eu4
+name: eu4-en
 description: >
   Query and reason over a Europa Universalis IV (EU4) script index through the
   `eu4` MCP server: explain events/missions/decisions and their conditions and
@@ -8,6 +8,11 @@ description: >
   events, missions, decisions, modifiers, flags, mod overrides, localisation —
   or asks "how do I achieve X", "why can't I do Y", or "is this a bug".
 ---
+
+## DSH skill language selection
+
+Select `eu4-en` yourself for English conversation, or as the available fallback for languages without a translation. Choose `eu4-zh` when the user is conversing in Chinese, regardless of UI language or the legacy plugin language setting; no explicit language request is needed. Code, identifiers, paths and quoted foreign text do not by themselves change conversational language. Load one translation at a time. If the user switches language, load the matching translation and use its language and terminology guidance in place of the previous version. Answer in the user's current language.
+
 
 # EU4 Indexer
 

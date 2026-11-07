@@ -36,6 +36,26 @@ try {
       )
   await access(path.join(packageDir, 'docs/architecture.md'))
   await access(path.join(packageDir, 'resources/docs/management.md'))
+  const { registerSkills } = await import(
+    pathToFileURL(path.join(packageDir, 'src/integration/skills.js'))
+  )
+  const definitions = []
+  const disposeSkills = await registerSkills({
+    skills: {
+      register: (definition) => {
+        definitions.push(definition)
+        return () => {}
+      },
+    },
+  })
+  assert.deepEqual(
+    definitions
+      .filter((definition) => definition.invocation?.modelInvocable !== false)
+      .map((definition) => definition.name)
+      .sort(),
+    ['eu4-en', 'eu4-zh', 'hoi4-en', 'hoi4-zh'],
+  )
+  await disposeSkills()
   const engine = new Engine({
     home: path.join(temp, 'home'),
     fetchImpl: async () => {
