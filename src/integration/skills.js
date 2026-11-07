@@ -8,8 +8,8 @@ const games = {
     zh: '查询 EU4 事件、任务、决议、条件、修正、本地化，追溯关系并规划游戏目标。',
   },
   hoi4: {
-    en: 'HOI4 focus trees, events, decisions, ideas, conditions, localisation and game goals.',
-    zh: '查询 HOI4 国策树、事件、决议、理念、条件、本地化，追溯前置关系并规划游戏目标。',
+    en: 'HOI4 focus trees, events, decisions, ideas, doctrines, modifiers, conditions, localisation and game goals.',
+    zh: '查询 HOI4 国策树、事件、决议、理念、学说、修正、条件、本地化，追溯前置关系并规划游戏目标。',
   },
 }
 

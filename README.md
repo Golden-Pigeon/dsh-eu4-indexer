@@ -65,6 +65,8 @@ scripts/                  构建、打包、检查和本地预览
 
 升级上游时先更新 submodule，重新构建技能与引擎，运行两边回归，再更新 lock；不要只替换可执行文件。游戏、规则和用户数据库不会打入 npm 包。当前上游增强在本地分支，推送前新机器无法仅从远程取得尚未发布的 submodule 提交。
 
+2026-11-07 已核对 CWTools 和两种游戏规则：CWTools、EU4 固定提交已是最新；HOI4 更新至 `297dd69c`，新增学说关系、修正模板及脚本表达式查询适配。详见[依赖与功能覆盖](resources/docs/dependencies.md)。已有 HOI4 索引需在插件中安装新规则并刷新，才能获得新增派生关系。
+
 ## 验证
 
 `npm run check` 做语法检查、技能生成和单元/UI 交互测试；`npm run test:integration` 使用真实引擎、官方 Cordis/MCP 客户端及 EU4/HOI4 合成游戏。先构建上游，准备两种游戏的 CWTools 规则；默认规则路径为 `~/.eu4indexer/config/{eu4,hoi4}`，可通过 `EU4_CONFIG_DIR`、`HOI4_CONFIG_DIR` 指定。设置 `DSH_EU4_ENGINE` 可验证发布后的 self-contained 引擎。

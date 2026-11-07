@@ -165,6 +165,15 @@ test(
       )
       assert.match(texts(a), /eu4/)
       assert.match(texts(b), /hoi4/)
+      assert.match(
+        texts(
+          await run(agents.get('two'), 'what_does_it_do', {
+            entityKey: 'fixture_multi_track_doctrine',
+            entityType: 'subdoctrine',
+          }),
+        ),
+        /doctrine_excludes/,
+      )
       await run(agents.get('one'), 'select_database', { name: 'hoi4' })
       assert.match(
         texts(

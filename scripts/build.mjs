@@ -41,6 +41,10 @@ await cp(
   path.join(root, 'external/eu4-indexer/docs/management.md'),
   path.join(root, 'resources/docs/management.md'),
 )
+await cp(
+  path.join(root, 'external/eu4-indexer/docs/dependencies.md'),
+  path.join(root, 'resources/docs/dependencies.md'),
+)
 console.log('Built four game/language skills from the pinned submodule.')
 if (process.argv.includes('--bundle-engine')) {
   const manifest = JSON.parse(

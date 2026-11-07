@@ -220,6 +220,23 @@ test(
         ).name,
         'hoi4',
       )
+      const doctrine = await c.call(
+        'what_triggers',
+        { entityKey: 'fixture_special_forces', entityType: 'doctrine_folder' },
+        'one',
+      )
+      assert.match(JSON.stringify(doctrine), /doctrine_in_folder/)
+      assert.match(JSON.stringify(doctrine), /adds_mastery/)
+      assert.match(
+        JSON.stringify(
+          await c.call(
+            'resolve_symbol',
+            { name: 'production_cost_arms_factory_factor' },
+            'one',
+          ),
+        ),
+        /modifier/,
+      )
       assert.equal(
         decoded(await c.call('list_databases', {}, 'two')).find(
           (d) => d.isActive,
