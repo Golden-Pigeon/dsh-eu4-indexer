@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Pass the original DSH rc.1 integration preload as a file URL so Windows runs the installed-package tests instead of interpreting a drive letter as a URL scheme.
+
 - Reuse checked CRLF-aware archive paths throughout complete release-set validation, and explicitly clear npm child-process PATH to prevent Windows from restoring the caller's path.
 
 - Handle Windows tar's CRLF output in npm manifest verification without trimming unsafe filename characters. Keep subprocess and stale-source regressions portable, and allow the full Cordis/MCP integration enough time on slower native CI runners.

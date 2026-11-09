@@ -110,7 +110,7 @@ try {
     [
       '--expose-internals',
       '--import',
-      path.join(root, 'scripts/lib/dsh-rc1-loader.mjs'),
+      new URL('./lib/dsh-rc1-loader.mjs', import.meta.url).href,
       '--test',
       ...tests,
     ],

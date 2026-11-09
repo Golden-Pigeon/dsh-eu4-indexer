@@ -85,7 +85,9 @@ fixtures still require failed process exits and prevent later checks after
 termination; POSIX signal text is asserted only on POSIX. The stale-TypeScript
 guard still requires the deliberate source change to be detected. The real
 Cordis/MCP fixture has a 180-second overall budget; production operation timeouts
-are unchanged. Full native CI and a verified nine-package CI artifact set remain
+are unchanged. Its original rc.1 preload is passed as a file URL, because the
+Windows installed-package run rejected an absolute drive path before loading
+tests. Full native CI and a verified nine-package CI artifact set remain
 required before first npm publication.
 
 Before the scope migration, post-merge validation passed 63 unit/browser tests on
