@@ -308,7 +308,7 @@ export class Engine {
       // Verify every member before extraction, including link targets.
       if (process.platform === 'win32') {
         const script =
-          'Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead($env:EU4_ARCHIVE); try { foreach($e in $z.Entries) { $target=[IO.Path]::GetFullPath([IO.Path]::Combine($env:EU4_EXTRACT,$e.FullName)); $root=$env:EU4_EXTRACT+[IO.Path]::DirectorySeparatorChar; if(!$target.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe archive path" }; if((($e.ExternalAttributes -shr 16) -band 61440) -eq 40960) { throw "Archive links are not allowed" } }; [IO.Compression.ZipFile]::ExtractToDirectory($env:EU4_ARCHIVE,$env:EU4_EXTRACT) } finally {$z.Dispose()}'
+          'Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead($env:EU4_ARCHIVE); try { foreach($e in $z.Entries) { $target=[IO.Path]::GetFullPath([IO.Path]::Combine($env:EU4_EXTRACT,$e.FullName)); $root=[IO.Path]::GetFullPath($env:EU4_EXTRACT).TrimEnd([IO.Path]::DirectorySeparatorChar)+[IO.Path]::DirectorySeparatorChar; if(!$target.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe archive path" }; if((($e.ExternalAttributes -shr 16) -band 61440) -eq 40960) { throw "Archive links are not allowed" } }; [IO.Compression.ZipFile]::ExtractToDirectory($env:EU4_ARCHIVE,$env:EU4_EXTRACT) } finally {$z.Dispose()}'
         await exec(
           'powershell.exe',
           [

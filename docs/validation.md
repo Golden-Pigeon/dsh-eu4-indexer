@@ -64,7 +64,8 @@ Complete-set validation and npm staging were skipped in both runs.
 
 Platform jobs omit the pinned staging CLI and skip that optional real npm case;
 the complete-set job runs it. Local verification supplies npm 11.21.2 and runs
-all 99 tests without skips.
+all 99 portable tests without skips. Four additional malicious-ZIP cases run
+natively in Windows jobs.
 
 The source pin `50d399a` closes short-lived MCP and refresh-input SQLite
 connections without pooling, clears test pools before file cleanup, and runs
@@ -87,7 +88,11 @@ guard still requires the deliberate source change to be detected. The real
 Cordis/MCP fixture has a 180-second overall budget; production operation timeouts
 are unchanged. Its original rc.1 preload is passed as a file URL, because the
 Windows installed-package run rejected an absolute drive path before loading
-tests. Full native CI and a verified nine-package CI artifact set remain
+tests. A native minimal ZIP reproduced Windows 8.3 temporary-directory expansion:
+entry targets were normalized to long paths while the extraction root stayed
+short. Normalizing both paths removes the false rejection. Native regressions
+retain rejection of traversal, sibling-prefix escapes, absolute paths and links.
+Full native CI and a verified nine-package CI artifact set remain
 required before first npm publication.
 
 Before the scope migration, post-merge validation passed 63 unit/browser tests on
