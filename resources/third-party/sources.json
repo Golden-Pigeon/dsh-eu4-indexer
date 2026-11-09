@@ -1,0 +1,70 @@
+{
+  "argu": {
+    "url": "https://raw.githubusercontent.com/fsprojects/Argu/6.2.5/LICENSE.md",
+    "sha256": "9c21d6c7ac38bf0754430c401f31f66769a40ccb4eed0441e92b1e2470c21785"
+  },
+  "dotnet.glob": {
+    "url": "https://raw.githubusercontent.com/dazinator/DotNet.Glob/6f8a320a9cc6069e80f36bb24f777a21d1c48064/LICENSE",
+    "sha256": "429043163595c890afafb37d4cb2ab4f761c2a978682edbf9d37615d61960c03"
+  },
+  "fparsec": {
+    "url": "https://raw.githubusercontent.com/stephan-tolksdorf/fparsec/4cc2a26fa6d9c3332f560421f54dc3d5823aa7eb/Doc/src/license.txt",
+    "sha256": "c3e451493da322cded2d5e497663e099248f85b90fcdcf22c8fa8bd9e6fa8f02"
+  },
+  "fsharp.collections.parallelseq": {
+    "url": "https://raw.githubusercontent.com/fsprojects/FSharp.Collections.ParallelSeq/main/LICENSE.txt",
+    "sha256": "1e8ffa98bfcd98a66c5f75877440eed66fb49645d8752d4720deebc66e7be78d"
+  },
+  "fsharp.data": {
+    "url": "https://raw.githubusercontent.com/fsprojects/FSharp.Data/3.1.1/LICENSE.md",
+    "sha256": "cb1d4cd6ba8a46442b10b4ae657cbc36248fb74d3ab5e61d8929ade11a2e22c9"
+  },
+  "fsharpx.collections": {
+    "url": "https://raw.githubusercontent.com/fsprojects/FSharpx.Collections/2.0.0/LICENSE.txt",
+    "sha256": "9929593e896cbe4563e7640c29cb55d9494ab6a1611aa58afc4703282cab3615"
+  },
+  "fspickler": {
+    "url": "https://raw.githubusercontent.com/mbraceproject/FsPickler/3aae1764238085afbb50b08c7a75f4577be178ca/License.md",
+    "sha256": "6ce90027a4b2124cc9504a24503ea9f6399861892cd7ac39654dac824c6b4cac"
+  },
+  "ktrie": {
+    "url": "https://raw.githubusercontent.com/kpol/trie/6d5e49b25a9621bc38b5342a2606ee3c038a22de/LICENSE",
+    "sha256": "57c713812baae11ea14bc38f2c297dc3d42cb98dec810047d0fdcbed60a5b00d"
+  },
+  "modelcontextprotocol": {
+    "url": "https://raw.githubusercontent.com/modelcontextprotocol/csharp-sdk/v1.4.0/LICENSE",
+    "sha256": "7c6a686d2b34b86ad8c726e0ac4d76903b525f251d73e617f8db3879fa8f11fc"
+  },
+  "npgsql": {
+    "url": "https://raw.githubusercontent.com/npgsql/npgsql/v9.0.2/LICENSE",
+    "sha256": "0e027c13e389ffca97a3ad4053372b747c062d33345c9915ecb060e33ee90643"
+  },
+  "sandwych.quickgraph.core": {
+    "url": "https://raw.githubusercontent.com/oldrev/Sandwych.QuickGraph/master/LICENSE.md",
+    "sha256": "d3e64b2ceb2c2d626295484c930b687f39a8bf399297ff327d6e6cacf883334c"
+  },
+  "sharpziplib": {
+    "url": "https://raw.githubusercontent.com/icsharpcode/SharpZipLib/v1.4.2/LICENSE.txt",
+    "sha256": "d7fbbc16f871bf24fa5624c7eaf945054b778985f32676dcacba41fddca61133"
+  },
+  "sqlitepclraw": {
+    "url": "https://raw.githubusercontent.com/ericsink/SQLitePCL.raw/v2.1.10/LICENSE.TXT",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  "vds.common": {
+    "url": "https://raw.githubusercontent.com/dotnetrdf/vds-common/30d982820239dd6f1ed623f3866aa7fac860b8ea/License.txt",
+    "sha256": "3943348f59ecfd38f6db152a8a1ce959f277541dddcfbeff5d9a339d4a6977f0"
+  },
+  "zstring": {
+    "url": "https://raw.githubusercontent.com/Cysharp/ZString/2.6.0/LICENSE",
+    "sha256": "f3e6cffb78d6d94fa37fd26ada7294c3284b6b89940b5645f93ed24cdd5b36b0"
+  },
+  "dotnet": {
+    "url": "https://raw.githubusercontent.com/dotnet/runtime/v9.0.17/LICENSE.TXT",
+    "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310"
+  },
+  "fparsec-unicode": {
+    "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.26.0/text/Unicode-DFS-2015.txt",
+    "sha256": "89e104c664787a7e98d6ccb8c5c24fe8033ed75421ccbcfd360222732b5a3ccd"
+  }
+}

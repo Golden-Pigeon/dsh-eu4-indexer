@@ -1,48 +1,166 @@
-# 架构与管理操作
+# Project Structure & Architecture
 
-DSH 适配层不重新实现解析器、数据库模型或游戏查询。submodule 的 `manage` 将 Discovery、Setup、Pipeline、IndexInputs 和 Registry 暴露为版本化 JSONL；`serve` 继续提供上游全部查询工具。通用接口详情见 [上游协议](../resources/docs/management.md)。
+The DSH adapter reuses the upstream parser, database model and game queries. The
+pinned submodule's `manage` command exposes Discovery, Setup, Pipeline,
+IndexInputs and Registry through versioned JSONL; `serve` provides all upstream
+query tools. See the [management reference](management.md) for plugin operations
+and the [upstream protocol](../resources/docs/management.md) for engine details.
 
-`IndexerService` 是界面和模型工具共享的入口。短操作转发到引擎，耗时操作进入 `Tasks`。同名索引不允许同时变更，规则更新与构建互斥，引擎切换等待后台任务结束。任务日志有界保存；原始进度保留在内存，终态及结果落盘。卸载取消并等待子进程退出；下次启动将未完成记录标为 interrupted，不自动重复构建。
+## Code layout
 
-## 操作
+```text
+external/eu4-indexer/     Upstream: parsing, databases, management API, query sessions
+src/engine/               Engine lookup, JSONL processes, platforms, verification, rollback
+src/indexing/             Persistent tasks, queuing, cancellation, restart recovery
+src/integration/          Session MCP clients, selection coordinator, skills, preview HTTP
+src/client/client.tsx     DSH slot UI and English/Chinese text
+src/client/host.ts        Browser loader and host-service types
+src/contracts.ts          Shared request, response, task and state types
+src/service.ts            Management operations, chat defaults, cross-task constraints
+src/index.ts              Cordis plugin, authenticated RPC, management tool
+dist/                    Generated runtime code, declarations and source maps
+resources/skills/         Skills generated from pinned upstream
+resources/docs/           Generated upstream protocol and dependency references
+packages/engine-*/        Separate npm engines for each OS, CPU and libc
+scripts/                  Builds, packaging, validation and local preview
+docs/                    Usage, interface, architecture, packaging and validation
+```
 
-| 操作 | 参数 |
-| --- | --- |
-| `state` / `tasks` | 插件状态及任务列表 |
-| `capabilities` / `status` / `list` | 上游能力、环境、注册表 |
-| `detect` | `game`, 可选 `gameDir`, `mods[]`, `workshopIds[]`, `playset`, `autoMods` |
-| `workshop` / `playsets` | `game` |
-| `index` | `name`, `game`, 上述发现参数，`configDir`, `languages[]`, `skipGeneric`, `noFts` |
-| `refresh` | `name`, `game`；实际重建参数取自数据库中保存的原始输入 |
-| `setup` | `game`；后台下载规则 |
-| `register` | `name`, `path`, 可选 `setActive` |
-| `inspect` | `name` 或 `path`, 可选 `errorOffset`, `errorLimit`（1–1000） |
-| `remove` | `name`, 可选 `deleteFile`；已绑定和正在构建的索引会拒绝 |
-| `bind` / `unbind` | 界面提供 `sessionId`；模型调用使用执行它的聊天 id。`bind` 另需 `name` |
-| `cancel_task` | `taskId` |
-| `install_engine` | 使用本机锁定产物；后台校验、安装与重连 |
-| `configure` | 仅界面使用的 `executablePath`，探测兼容性后保存 |
+Production source uses strict TypeScript, with TSX for the management UI.
+`src/contracts.ts` shares operation-specific request and response types, task
+state and session state. `src/client/host.ts` describes the rc.1 browser loader
+and host services. `dist/` supplies the JavaScript, declarations and source maps
+loaded by npm and DSH. React is injected by the host; the compiler is a development
+dependency. Node build scripts and tests against compiled output remain `.mjs`.
 
-## 会话
+Builds type-check and compile in memory before clearing old output. Compilation
+diagnostics preserve the last runnable artifacts. See
+[CONTRIBUTING.md](../CONTRIBUTING.md) for conventions and commands.
 
-每个 `agent.ctx` 挂载一个官方 `@deepseek-ai/dsh-mcp-client`，serverName 都是 `eu4`，由 DSH scope 隔离工具注册。进程以 `serve --db <path> --query-session <agent.id>` 启动。切换聊天默认索引会清理旧连接，再创建新连接；失败恢复旧连接。任务完成仅刷新使用该索引的聊天；引擎替换先清理客户端再重连。已关闭聊天的默认仍可在界面解除。
+## Tasks and concurrency
 
-默认绑定与运行期 `select_database` 分工：前者持久保存，后者只改变当前 MCP 查询会话，在该进程退出后消失。重建或重连恢复持久默认。没有持久默认时，使用注册表 activeDb，或唯一索引；多个索引且没有默认时，等待明确绑定。不存在的已保存选择报错，避免静默改查别的数据。
+`IndexerService` is shared by the UI and model tool. Short operations go to the
+engine; long operations go through `Tasks`. Changes to the same index name are
+exclusive, rule updates exclude builds, and engine switches wait for background
+tasks. Task logs are bounded: raw progress stays in memory, while terminal state
+and results are persisted. Tasks awaiting their first journal write are included
+in cancellation and disposal. Only persisted tasks may execute; cancellation
+before persistence completes prevents a later start. Disposal cancels work and
+waits for child processes. Restart marks unfinished records as `interrupted`
+without repeating builds.
 
-上游也支持在同一 MCP 连接的每次 `tools/call` 中使用 `_meta["eu4indexer/sessionId"]`。各 id 的选择独立于连接默认及其他 id。省略它并且没有 `--query-session` 时，保留原客户端行为。`close_query_session` 释放命名会话，连接关闭释放全部状态。会话 id 负责状态隔离，身份权限仍由宿主控制。
+Management reads may run concurrently; mutations enter serially. No index task
+starts during configuration probing, persistence or connection switching. Queries
+can continue during engine download and verification. Directory replacement takes
+exclusive management access and waits for in-flight MCP queries. `tasks` and
+`cancel_task` remain available during activation. If pausing connections fails,
+all clients finish cleanup before reconnection; settings are saved only after a
+successful pause. Cancellation is checked again before file replacement and is
+allowed while waiting for the pause gate, without recreating connections still
+in use.
 
-## 数据与安装
+## Sessions
 
-`home` 下的 `config.json` 是上游注册表，`db/<game>/` 保存不可变版本，`config/<game>/` 保存规则；`sessions.json`、`tasks.json`、`settings.json` 是插件数据。重建失败不覆盖原数据库。发布成功后仍保留旧版本，供已有读者继续使用；它们不会自动清理。强制终止可能留下未注册的 `.building` 文件，只能在确认没有构建进程后清理。导入外部数据库默认只注册；插件拒绝删除管理目录之外的文件。
+Each `agent.ctx` mounts an official `@deepseek-ai/dsh-mcp-client`, with
+`serverName` set to `eu4`; DSH scopes isolate tool registration. It starts the
+engine with `serve --db <path> --query-session <agent.id>`. Changing a chat's
+default closes its old connection before creating another; failure restores the
+old connection. Task completion identifies affected chats from persistent
+defaults, initial connection indexes and current temporary MCP selections, then
+reconnects them. Engine replacement disposes clients before reconnecting. rc.1
+can reuse an ID when restoring a chat: disposal state follows the particular
+Agent object, so a new object can connect and delayed cleanup of the old object
+cannot close the replacement.
 
-引擎归档固定 SHA-256，先验证路径、拒绝链接、完整解包，再探测 API。激活失败回滚上一版本。包中有对应归档时不需要联网；规则下载仍需要网络。外部引擎由用户自行更新。Windows 提取使用系统 PowerShell，Unix 使用 tar；本机测试不等于其他五种平台已执行过测试。
+Default bindings persist. Runtime `select_database` affects only that MCP query
+session and disappears when its process exits. Rebuilds and reconnections restore
+the persistent default. The management page and removal protection read actual
+selection through MCP's `list_databases`, rather than treating a saved default as
+the current selection. Queries may run concurrently; selection changes, bindings,
+automatic connection/reconnection and removal share an exclusive coordinator.
+Removal blocks selection of the target index and waits for existing queries
+before checking and removing it. Failure to read selection prevents removal.
 
-多个独立 DSH 宿主应各用独立 `home`，避免共享任务 journal 和会话默认。上游注册表的读改写有进程间锁与原子替换，但它不替应用协调同名构建。移除或手工清理文件前也需考虑插件外的 MCP 读者；插件无法枚举外部客户端。
+State polling holds shared query access while reading actual selection.
+Reconnection, pausing and Agent disposal wait for that check, preventing a
+connection from closing halfway through the management page's read.
 
-生产 UI 只通过 DSH `/api` RPC 的 `eu4-indexer/dispatch` 处理器访问管理功能，并检查 owner principal。命令与参数以 argv 和 JSON 传递，不拼 shell 命令。管理子进程和官方 MCP 客户端均清理宿主凭据环境。该插件按授权管理本机文件、下载规则及引擎，不开放独立公网管理端点。
+`register` can replace a registered path under the same name. It waits for affected
+chats to reconnect before returning, so subsequent queries do not keep using the
+old database. Other chats keep their connections. Import is refused during a
+build of the same name, preventing build completion from overwriting the import.
+Affected chats restore their persistent defaults, as after a rebuild.
 
-## 技能语言由模型选择
+Upstream also accepts `_meta["eu4indexer/sessionId"]` on each `tools/call` over a
+shared MCP connection. Each ID has its own selection, independent of the connection
+default and other IDs. Omitting it, without `--query-session`, preserves existing
+client behavior. `close_query_session` releases a named session; closing the
+connection releases all state. Session IDs isolate state; the host controls
+identity and permissions.
 
-技能注册不读取对话文本或界面 locale，不使用语言检测器。模型目录包含四个完整条目：`eu4-zh`、`eu4-en`、`hoi4-zh`、`hoi4-en`。条目描述与正文说明各自适用的交流语言，由 LLM 从当前对话直接选择。用户无需明确要求“用中文技能”。用户切换交流语言时，模型加载对应版本，后加载版本的语言和术语规则覆盖旧翻译；脚本标识、路径、代码与引用文本不单独代表交流语言变化。
+See [chats and skills](usage.md#chats-and-skills) for user-facing selection rules.
 
-原 `eu4`、`hoi4` 作为用户可显式调用的语言中立入口保留，指导模型加载对应版本；这些路由入口不加入模型自动发现目录，避免和四个完整技能重复。所有版本一直可用，某个聊天加载哪个版本不会修改其他聊天。旧 `language` 配置仅为兼容而接受，默认 `auto`，所有值均不再影响注册内容。
+## Data and installation
+
+Under `home`, `config.json` is the upstream registry, `db/<game>/` stores immutable
+database versions, and `config/<game>/` stores rules. `sessions.json`, `tasks.json`
+and `settings.json` belong to the plugin. Failed rebuilds preserve the original
+database. Successful replacement retains old versions for existing readers;
+cleanup is not automatic. Forced termination may leave unregistered `.building`
+files; remove them only after confirming no build process remains. External
+database imports register paths by default, and files outside the managed
+directory cannot be deleted through the plugin.
+
+Engine archives have pinned SHA-256 hashes. Installation validates paths, rejects
+links, extracts fully and probes the API before activation. Activation failure
+rolls back to the previous version. Optional platform dependencies carry the
+archives, so installation and switching do not need another network download;
+rule downloads still do. Full third-party notices are included in each archive
+and platform npm package. Windows extraction uses system PowerShell; Unix uses
+tar. See [validation](validation.md) for actual platform execution coverage.
+
+External executable paths are resolved against the host working directory and
+saved as absolute paths. This prevents MCP startup from losing a relative path
+when its working directory is the plugin data directory. Users manage external
+engine updates.
+
+Managed-engine lookup verifies the receipt's API, source commit, build SDK, RID
+and npm package name/version against the current plugin lock. Missing, damaged or
+stale receipts return `engine_update_required` rather than querying the old
+engine. The plugin and management panel still load, allowing the external path to
+be cleared and installation to run. Installation restores the receipt offline
+from the platform package. A matching installed engine does not require that
+optional package to remain on disk. External executables are checked for
+management API compatibility only.
+
+Independent DSH hosts need separate `home` directories to avoid sharing task
+journals and chat defaults. The upstream registry uses an interprocess lock and
+atomic replacement, but does not coordinate application-level builds of the same
+name. Removal and manual cleanup must also account for external MCP readers,
+which the plugin cannot enumerate.
+
+## DSH integration and permissions
+
+The production UI sends Connection RPC envelopes through a separate Fetch route,
+`/api/eu4-indexer/dispatch`. It reuses DSH authentication, owner-principal checks,
+body-size limits and cancellation signals without claiming the Gateway's sole
+`/api` RPC interceptor.
+
+Commands and parameters use argv and JSON, without shell interpolation. Both
+management child processes and official MCP clients strip host credentials from
+their environments. The plugin manages authorized local files, rules and engines
+without exposing a separate public management endpoint.
+
+## Skill registration
+
+Registration does not read conversation text or UI locale and uses no language
+detector. The model catalog has four complete entries: `eu4-zh`, `eu4-en`,
+`hoi4-zh` and `hoi4-en`. Their descriptions and instructions guide the model to
+choose by conversation language. The legacy `language` setting is accepted for
+compatibility; no value changes which skills are registered.
+
+`eu4` and `hoi4` remain language-neutral entry points for explicit user invocation.
+They stay out of automatic model discovery to avoid duplicates. All translations
+are always available, with independent loading in each chat. Registration failure
+rolls back prior contributions; disposal releases skills and browser dictionaries.
+See [chats and skills](usage.md#chats-and-skills) for language switching.

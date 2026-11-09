@@ -1,0 +1,36 @@
+{
+  "name": "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64",
+  "version": "0.1.0",
+  "description": "Self-contained EU4/HOI4 indexer engine for win-arm64.",
+  "license": "MIT",
+  "author": "Golden-Pigeon",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/verify-engine-package.mjs win-arm64"
+  },
+  "files": [
+    "engine.json",
+    "engine.tar.gz",
+    "engine.zip",
+    "LICENSE",
+    "README.md",
+    "THIRD-PARTY-NOTICES.md",
+    "third-party"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer.git",
+    "directory": "packages/engine-win-arm64"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@goldenpigeon/dsh-eu4-indexer-engine-darwin-x64",
+  "version": "0.1.0",
+  "description": "Self-contained EU4/HOI4 indexer engine for osx-x64.",
+  "license": "MIT",
+  "author": "Golden-Pigeon",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/verify-engine-package.mjs osx-x64"
+  },
+  "files": [
+    "engine.json",
+    "engine.tar.gz",
+    "engine.zip",
+    "LICENSE",
+    "README.md",
+    "THIRD-PARTY-NOTICES.md",
+    "third-party"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer.git",
+    "directory": "packages/engine-osx-x64"
+  }
+}

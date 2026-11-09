@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { Tasks } from '../src/indexing/tasks.js'
+import { Tasks } from '../dist/indexing/tasks.js'
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10))
 async function terminal(tasks, id) {
   for (let n = 0; n < 200; n++) {
@@ -13,6 +13,41 @@ async function terminal(tasks, id) {
   }
   throw new Error('Task did not finish')
 }
+test('prototype completion hooks are awaited before a task succeeds', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'e4-completion-'))
+  const entered = Promise.withResolvers(),
+    release = Promise.withResolvers()
+  let completed
+  class ConnectedTasks extends Tasks {
+    async onCompleted(task) {
+      entered.resolve()
+      await release.promise
+      completed = task.result
+    }
+  }
+  const tasks = new ConnectedTasks(home)
+  try {
+    await tasks.init()
+    const row = await tasks.start('index', 'base', {}, async () => ({
+      name: 'base',
+    }))
+    // A shadowed hook would let the task finish without reconnecting clients.
+    await Promise.race([
+      entered.promise,
+      terminal(tasks, row.id).then(() =>
+        assert.fail('Completion hook was skipped'),
+      ),
+    ])
+    assert.equal(tasks.list()[0].state, 'running')
+    release.resolve()
+    assert.equal((await terminal(tasks, row.id)).state, 'succeeded')
+    assert.deepEqual(completed, { name: 'base' })
+  } finally {
+    release.resolve()
+    await tasks.stop()
+    await rm(home, { recursive: true, force: true })
+  }
+})
 test('tasks serialize conflicting writes, queue unrelated work, and persist terminal results', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'e4-tasks-')),
     tasks = new Tasks(home, { concurrency: 1 })
@@ -94,4 +129,62 @@ test('host restart marks unfinished tasks interrupted', async () => {
   assert.equal(tasks.list()[0].state, 'interrupted')
   await tasks.stop()
   await rm(home, { recursive: true, force: true })
+})
+for (const action of ['cancel', 'stop'])
+  test(`${action} during initial journal persistence cannot leave queued or running work`, async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'e4-admission-'))
+    const tasks = new Tasks(home)
+    await tasks.init()
+    let release,
+      ran = false
+    tasks.writes = new Promise((resolve) => {
+      release = resolve
+    })
+    try {
+      const starting = tasks.start('index', 'a', {}, async () => {
+        ran = true
+      })
+      const id = tasks.list()[0].id
+      const ending = action === 'cancel' ? tasks.cancel(id) : tasks.stop()
+      release()
+      await Promise.all([starting, ending])
+      assert.equal(ran, false)
+      assert.equal(
+        tasks.list()[0].state,
+        action === 'cancel' ? 'cancelled' : 'interrupted',
+      )
+    } finally {
+      release()
+      await tasks.stop()
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+test('cancellation while the running state is being persisted does not invoke work with an aborted signal', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'e4-start-cancel-'))
+  const tasks = new Tasks(home)
+  await tasks.init()
+  let release,
+    ran = false
+  const originalSave = tasks.save.bind(tasks)
+  tasks.save = () => {
+    if (tasks.list()[0]?.state === 'running')
+      tasks.writes = new Promise((resolve) => {
+        release = resolve
+      })
+    return originalSave()
+  }
+  try {
+    const task = await tasks.start('index', 'a', {}, async () => {
+      ran = true
+    })
+    const cancel = tasks.cancel(task.id)
+    release()
+    await cancel
+    assert.equal((await terminal(tasks, task.id)).state, 'cancelled')
+    assert.equal(ran, false)
+  } finally {
+    release?.()
+    await tasks.stop()
+    await rm(home, { recursive: true, force: true })
+  }
 })

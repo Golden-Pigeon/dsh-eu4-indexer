@@ -5,10 +5,27 @@ import { readFile } from 'node:fs/promises'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { JSDOM } from 'jsdom'
+import { Context } from '@deepseek-ai/cordis'
 const script = await readFile(
-  new URL('../src/client/client.js', import.meta.url),
+  new URL('../dist/client/client.js', import.meta.url),
   'utf8',
 )
+test('compiled TSX can be evaluated repeatedly in the same browser global', () => {
+  const entries = []
+  const browser = vm.createContext({
+    window: { __ModuleLoader__: { load: (entry) => entries.push(entry) } },
+  })
+  for (let cycle = 0; cycle < 2; cycle++) vm.runInContext(script, browser)
+  assert.equal(entries.length, 2)
+  for (const entry of entries) {
+    assert.equal(entry.id, '@goldenpigeon/dsh-eu4-indexer')
+    assert.equal(
+      typeof entry.factory((name) => (name === 'react' ? React : undefined))
+        .Page,
+      'function',
+    )
+  }
+})
 test('browser entry registers both slots and drives build, bind, unbind, cancellation and pagination', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost' }),
     previous = { window: globalThis.window, document: globalThis.document }
@@ -58,7 +75,9 @@ test('browser entry registers both slots and drives build, bind, unbind, cancell
       sessions: [{ id: 'one', title: 'Chat one' }],
       environment: { games: [{ game: 'eu4', configReady: true }] },
     }
+  let previewResult, choicesResult
   const ctx = {
+    effect: (setup) => setup(),
     locale: {
       register(_name, values) {
         this.values = values
@@ -71,6 +90,13 @@ test('browser entry registers both slots and drives build, bind, unbind, cancell
       rpc: {
         call: async (_route, _endpoint, request) => {
           requests.push(request)
+          if (request.operation === 'detect' && previewResult)
+            return { ok: true, value: await previewResult }
+          if (
+            ['workshop', 'playsets'].includes(request.operation) &&
+            choicesResult
+          )
+            return { ok: true, value: (await choicesResult)[request.operation] }
           return {
             ok: true,
             value:
@@ -101,6 +127,13 @@ test('browser entry registers both slots and drives build, bind, unbind, cancell
   }
   entry.apply(ctx)
   assert.equal(slots.length, 2)
+  const manifest = JSON.parse(
+    await readFile(new URL('../package.json', import.meta.url)),
+  )
+  assert.deepEqual(
+    slots.map(({ options }) => options.key),
+    [manifest.name, `${manifest.name}#eu4-indexer`],
+  )
   const root = createRoot(document.getElementById('root'))
   const settle = async (fn) => {
     await act(async () => {
@@ -122,6 +155,8 @@ test('browser entry registers both slots and drives build, bind, unbind, cancell
       root.render(React.createElement(slots[0].view, { view: 'page' })),
     )
     assert.match(document.body.textContent, /Game script indexes/)
+    assert.match(document.body.textContent, /Choose a session/)
+    assert.doesNotMatch(document.body.textContent, /No loaded sessions/)
     await click('Details')
     await click('Next')
     assert.ok(
@@ -146,6 +181,52 @@ test('browser entry registers both slots and drives build, bind, unbind, cancell
     await click('Build index')
     await click('Build / rebuild index')
     assert.ok(requests.some((r) => r.operation === 'index' && r.game === 'eu4'))
+    let finishPreview
+    previewResult = new Promise((resolve) => {
+      finishPreview = resolve
+    })
+    await click('Build index')
+    await click('Preview resolved sources')
+    await settle(() => {
+      const game = document.querySelector('.e4 select')
+      game.value = 'hoi4'
+      game.dispatchEvent(new window.Event('change', { bubbles: true }))
+    })
+    await settle(() => finishPreview({ game: 'eu4', gameDir: '/old-game' }))
+    assert.doesNotMatch(document.body.textContent, /Resolved sources/)
+    previewResult = Promise.resolve({ game: 'hoi4', gameDir: '/current-game' })
+    await click('Preview resolved sources')
+    assert.match(document.body.textContent, /current-game/)
+    await settle(() => {
+      const game = document.querySelector('.e4 select')
+      game.value = 'eu4'
+      game.dispatchEvent(new window.Event('change', { bubbles: true }))
+    })
+    assert.doesNotMatch(document.body.textContent, /Resolved sources/)
+    let finishChoices
+    choicesResult = new Promise((resolve) => {
+      finishChoices = resolve
+    })
+    await click('Load mod choices')
+    await settle(() => {
+      const game = document.querySelector('.e4 select')
+      game.value = 'hoi4'
+      game.dispatchEvent(new window.Event('change', { bubbles: true }))
+    })
+    await settle(() =>
+      finishChoices({
+        workshop: [{ workshopId: 'old-eu4', name: 'Old EU4 mod' }],
+        playsets: [{ id: 'old-playset', name: 'Old EU4 playset' }],
+      }),
+    )
+    assert.doesNotMatch(document.body.textContent, /Old EU4/)
+    choicesResult = Promise.resolve({
+      workshop: [{ workshopId: 'new-hoi4', name: 'Current HOI4 mod' }],
+      playsets: [],
+    })
+    await click('Load mod choices')
+    assert.match(document.body.textContent, /Current HOI4 mod/)
+    await click('Background tasks •')
     await click('Cancel')
     assert.ok(
       requests.some((r) => r.operation === 'cancel_task' && r.taskId === 'job'),
@@ -158,5 +239,50 @@ test('browser entry registers both slots and drives build, bind, unbind, cancell
     globalThis.window = previous.window
     globalThis.document = previous.document
     delete globalThis.IS_REACT_ACT_ENVIRONMENT
+  }
+})
+
+test('browser dictionaries are released on unload and can be registered on re-enable', async () => {
+  let entry
+  vm.runInNewContext(script, {
+    window: {
+      __ModuleLoader__: {
+        load(value) {
+          entry = value.factory((name) =>
+            name === 'react' ? React : undefined,
+          )
+        },
+      },
+    },
+  })
+  const ctx = new Context(),
+    dictionaries = new Map()
+  ctx.provide('locale', {
+    register(namespace, values) {
+      assert.equal(
+        dictionaries.has(namespace),
+        false,
+        'dictionary was not released',
+      )
+      dictionaries.set(namespace, values)
+      return () => dictionaries.delete(namespace)
+    },
+    bind: () => (key) => dictionaries.get('eu4Indexer').en[key] ?? key,
+  })
+  ctx.provide('slots', {
+    inject: (_name, register) => register(),
+    register: () => () => {},
+  })
+  ctx.provide('connection', {})
+  try {
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const handle = ctx.plugin(entry)
+      await handle.await()
+      assert.equal(dictionaries.size, 1)
+      await handle.dispose()
+      assert.equal(dictionaries.size, 0)
+    }
+  } finally {
+    await ctx.fiber.dispose()
   }
 })

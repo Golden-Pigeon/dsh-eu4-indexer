@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.png binary
+*.zip binary
+*.gz binary
+# Preserve upstream license snapshots, including their original whitespace.
+resources/third-party/*.txt -text -whitespace

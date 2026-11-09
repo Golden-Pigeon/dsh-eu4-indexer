@@ -1,19 +1,147 @@
-# 本地验证记录
+# Validation & Compatibility
 
-本次开发环境：macOS ARM64，Node.js 24 / 26，.NET 9。没有推送、远程标签或发布操作。
+This page records executed code validation as of **2026-11-09**. Earlier findings,
+fixes and test counts remain in the [review history](reviews/2026-11-08.md).
+Reproduction evidence is local to `artifacts/` and is not shipped in npm packages.
+See [test commands](../CONTRIBUTING.md#tests) to reproduce the checks.
 
-- 上游构建通过；完整 xUnit 回归 114 项通过，提供 EU4/HOI4 CWTools 规则以启用合成夹具，包括更新后的 HOI4 `297dd69c`。
-- `npm run check`：语法、技能生成、24 项单元与浏览器交互测试通过。
-- 两项真实集成测试分别验证通用 JSONL/MCP 与官方 Cordis、Tools、SkillRegistry、skill 加载工具、MCP 客户端集成；在开发引擎和 self-contained 引擎上均通过。
-- 技能目录向模型提供四个语言版本；验证两个聊天并发加载不同语言、随后互换语言、旧 language 配置不裁剪版本，以及通用用户入口保留。测试覆盖目录与加载链路，未调用在线模型评估自然语言选择率。
-- 覆盖同连接多会话并发选库、独立查询、释放会话、旧客户端行为、DSH 各聊天隔离、绑定/解绑、owner RPC 准入、无 Connection 服务的宿主、卸载清理。
-- 覆盖 EU4/HOI4 合成数据构建、刷新、旧版本保留、失败/取消保留原注册、导入/移除、外部文件删除保护、空行号解析错误及分页。
-- `scripts/management-smoke.py` 对两种引擎构建均通过。
-- 2026-11-07 从规范远程仓库核对 CWTools、构建 fork、EU4/HOI4 规则。CWTools / EU4 无新增提交；HOI4 跨 44 个提交、48 个文件更新。实际 `setup --game hoi4` 在临时目录下载固定版本并写入正确的 ref 标记，未替换用户原有规则。
-- HOI4 新夹具验证自定义学说分类、多轨道与 XOR、分配/精通度目标、变量表达式、新触发器、能力和特质效果、海军将领钩子、修正模板和本地化。真实 stdio 与官方 DSH 桥接集成也查询新增学说关系。完整原有 EU4 效果分析回归通过。
-- 实际 Chromium 页面检查无脚本错误；桌面及 390px 窄屏无横向溢出。截图在 `artifacts/screenshots/`。
-- 本地 npm 包包含完整 macOS ARM64 引擎归档、技能、许可证和说明。`scripts/verify-package.mjs` 从包解压到临时目录，禁止网络获取引擎，验证离线安装、校验、API 探测与空注册表。
+## DSH v0.2.2-rc.1
 
-本次未实际执行 Windows/Linux 环境，CI 文件已覆盖三种操作系统的本机构建和集成。四项使用 Unix shebang 的模拟进程测试和两项模拟引擎归档测试在 Windows 跳过；Windows 仍执行真实引擎集成测试。其余五种 RID 可由构建脚本生成，本地包只携带本次实际构建的平台。
+The baseline is the official `dsh-v0.2.2-rc.1` tag
+(`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`) and the installed desktop package
+of that version, rather than a development branch carrying the same version
+number with later changes.
 
-`npm audit` 对开发锁文件中的官方 DSH `0.2.2-rc.1` 依赖图报告 18 条传递影响记录，实际根源为 MCP HTTP/OAuth 重定向、undici 和 zod 的上游公告。插件使用官方桥接的 stdio 传输；本仓库没有修改宿主提供的 DSH peer 包，也没有使用强制升级覆盖它们。此结果不等于这些依赖已修复；升级宿主/桥接版本后需重新做兼容性验证。原始本地输出保存在 `artifacts/npm-audit.json`。
+The actual npm main package passed two real-engine integrations in isolation
+against original official dependencies: MCP SDK `2.2.0`, undici `8.11.2` and zod
+`4.4.3`, without development overrides. Coverage includes real Connection,
+Cordis tool execution, EU4/HOI4 queries, chat isolation, skill registration and
+disposal. The desktop package's bundled Node and dependencies also passed these
+integrations; this is not end-to-end desktop UI validation.
+
+Real UI validation used the same official CLI, Web frontend and runtime, with
+separate `DSH_HOME`, `DSH_AGENTS_HOME`, plugin `home` and pnpm store. Executed
+checks include managed-engine installation, rule downloads, synthetic-game
+indexing, source previews, parse details, chat bindings, in-use removal protection
+and plugin disable/re-enable. The latest re-enable check restored the panel and
+preserved indexes, with zero browser script errors.
+
+Natural-language skill selection in live multi-turn model conversations has not
+been measured. Automated integration covers all four translations, concurrent
+loading and session isolation. UI reload tests do not use the daily desktop
+instance; see [isolation instructions](../CONTRIBUTING.md#isolated-web-validation).
+
+## Platform coverage
+
+| Platform                                | Executed coverage                                                                                                                                                                                                                        |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS ARM64                             | After the scope migration: strict checks, type contracts and 94 unit/browser tests; two original rc.1 installed-package integrations; npm/pnpm installation, platform selection, public types and offline recovery; real rc.1 Web checks |
+| Linux glibc x64                         | After the scope migration: 94 unit/browser tests, two real-engine integrations, two original rc.1 installed-package integrations, npm/pnpm installation and offline recovery                                                             |
+| Linux musl x64                          | The same complete regression scope as glibc, in an Alpine container                                                                                                                                                                      |
+| macOS x64                               | Earlier two real-engine integrations through Rosetta; the final TS/TSX checks were not rerun on x64                                                                                                                                      |
+| Windows x64                             | Upstream PR #10 passed build, installation, CLI, MCP and management checks on a GitHub Windows runner; this plugin's npm package has not been run on Windows                                                                             |
+| Windows ARM64, Linux ARM64 glibc / musl | Cross-built and artifact-validated; no corresponding runtime execution yet                                                                                                                                                               |
+
+The plugin CI defines six native OS/CPU jobs plus musl containers on both Linux
+architectures, but has not run remotely. Upstream PR #10 and post-merge main
+passed Linux/macOS/Windows smoke checks. Cross-builds and archive validation do
+not establish runtime compatibility on the target platform.
+
+Before the scope migration, post-merge validation passed 63 unit/browser tests on
+macOS ARM64 and both x64 Linux libc variants. After moving to `@goldenpigeon`, all
+three passed the 94-test suite, original rc.1 installed-package integrations and
+npm/pnpm installation, platform selection and offline recovery. Both Linux
+variants also passed two real-engine integrations. Isolated original rc.1 Web
+loaded the scoped plugin panel and installed its managed engine with zero script
+errors; the installed client bytes matched this round's artifact. All nine scoped
+tarballs were repacked and passed full release-set receipt validation. Old
+unscoped tarballs were moved out of the release directory. Evidence:
+`artifacts/npm-scope-*.log` and `artifacts/npm-scope-web-result.json`.
+
+## npm and build validation
+
+- The main-plus-eight-platform release set passed checks of actual files, current
+  in-memory TS compilation, platform metadata, pinned source, SDK, archive hashes
+  and licenses.
+- Real npm/pnpm installs downloaded only the matching engine. Checks cover public
+  types coexisting with same-name host types, offline installation, refusal of
+  damaged receipts, reinstallation recovery and continued use after removal of
+  the optional platform package.
+- Original JS and current TSX replayed identical UI interactions. DOM, form state
+  and RPC requests matched at 22 checkpoints. Added task, session and service
+  regressions also ran against pre-refactor source.
+- The last consecutive source review fixed signal-exit handling in check and
+  archive subprocesses and added three regressions. Full review after the fix
+  found no further issues. Temporary glibc/musl test directories and containers
+  were removed and independently confirmed absent.
+- Privacy checks found personal F# build paths and local owner/extended-attribute
+  archive metadata. Neutral source staging and archive metadata cleanup fixed
+  them, with three regressions. All eight engines were rebuilt; internal files
+  and archive metadata in all nine npm packages passed reinspection. Retained
+  history and third-party content are covered in [privacy review](privacy.md).
+
+Upstream PR #10 passed three-platform smoke tests and was rebase-merged into main.
+Additional fixes replaced a retired macOS CI runner and corrected Windows
+management-path formatting, with real-engine regressions. The submodule pins
+merged main with the same tested source tree; all eight engines include the
+Windows fix.
+
+Evidence includes `artifacts/upstream-merge/` and `artifacts/privacy-review/`.
+Earlier TS source reviews, behavior comparisons and Web screenshots are in
+`artifacts/ts-final-review/`, `artifacts/ts-review/` and `artifacts/ts-review2/`.
+See the [history](reviews/2026-11-08.md) for chronology.
+
+## npm staging validation
+
+The workflow and scripts passed local actionlint, compilation, type, unit and
+browser checks. Regressions cover whole-set initial-publication guards,
+placeholder versions, public/staged targets, registry errors, prerelease tags,
+old npm versions, changed archives, partial failures and receipt completeness.
+Actual npm packlists exclude `.secret/` and token files; tests do not read tokens.
+
+Credential review removed project dependency installation and builds from the
+staging job. Release receipts bind the workflow commit, nine archive hashes and
+exact dependencies. Full-script regressions run without `node_modules` or `dist`.
+They cover explicit staging opt-in, zero uploads when the last package lacks an
+initial publication, incomplete summaries after partial failure, and isolation
+from Node preload, PATH replacement, external npm configuration, unrelated secrets
+and token-bearing child-process errors. Credentials must live in the
+`npm-staging` environment restricted to the default branch. Remote environment
+rules and secrets have not been configured or verified; finish the
+[publishing setup](publishing.md#staging-credentials) before enabling staging.
+
+Real npm **11.21.2** ran against a temporary loopback registry with fake tokens.
+It wrote only to staging endpoints, uploaded identical tarball bytes and skipped
+lifecycle scripts. GitHub CI still requires an authorized push. No secrets were
+uploaded and no real npm staging, approval or publication occurred.
+
+Further regressions reject malicious tarballs even with self-consistent hashes:
+embedded `publishConfig`, changed identity or other manifest fields, private
+packages, duplicate or hard-linked manifests and corrupt archives. The full entry
+point refuses these before starting any npm subprocess. Receipt creation rejects
+archives replaced after validation instead of recording new hashes. Final artifact
+handoff uses the validation job's output artifact ID. Static workflow checks pass;
+real GitHub handoff awaits an authorized push.
+
+That CI review passed 92 local tests; Node 24 glibc and musl containers each passed
+29 staging tests, including loopback uploads with the real pinned npm CLI. All
+nine actual packages passed manifest, content and receipt validation; actionlint
+passed. Full review after fixes found no further issues. Temporary directories
+and containers were cleaned and independently checked. Evidence is in
+`artifacts/ci-review3-*.log`. The subsequent scope-migration run is recorded above.
+
+## Current local status
+
+The plugin and npm packages are unpublished, and this repository's changes have
+not been pushed. Upstream privacy-history cleanup was pushed with authorization
+for that operation, then two branches and six tags were verified. Uncommitted
+upstream work was preserved. Pinned source `7002d31`, including SQLite and Windows
+path fixes, is on main and can be fetched to initialize the submodule; see
+[PR #10](https://github.com/Golden-Pigeon/eu4-indexer/pull/10). Later pushes,
+remote tags and releases each require explicit authorization. See
+[history and third-party content](privacy.md#history-and-third-party-content)
+for read-only PR refs and GitHub caches.
+
+Development dependency audits do not establish that all user-host dependencies
+are free of advisories. rc.1 compatibility requires no host SDK upgrade. See
+[licenses and audit boundaries](packaging.md#third-party-licenses-and-dependency-audits).

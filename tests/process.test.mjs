@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, writeFile, chmod, rm, readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { manage } from '../src/engine/process.js'
+import { manage } from '../dist/engine/process.js'
 async function fixture(source) {
   const home = await mkdtemp(path.join(os.tmpdir(), 'e4-runner-')),
     exe = path.join(home, 'fake')

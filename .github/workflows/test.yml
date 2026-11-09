@@ -1,19 +1,33 @@
-name: local-package-tests
+name: package-tests
 on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Stage an update on npm after all checks (initial publication is manual)'
+        type: boolean
+        default: false
+      dist_tag:
+        description: 'npm tag applied when the owner approves the staged version'
+        type: choice
+        options: [latest, next, beta]
+        default: latest
+permissions:
+  contents: read
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14]
+        include:
+          - { os: ubuntu-24.04, rid: linux-x64, musl: linux-musl-x64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, musl: linux-musl-arm64 }
+          - { os: windows-2025, rid: win-x64 }
+          - { os: windows-11-arm, rid: win-arm64 }
+          - { os: macos-15, rid: osx-arm64 }
+          - { os: macos-15-intel, rid: osx-x64 }
     runs-on: ${{ matrix.os }}
-    env:
-      EU4INDEXER_HOME: ${{ runner.temp }}/eu4-indexer-rules
-      EU4_CONFIG_DIR: ${{ runner.temp }}/eu4-indexer-rules/config/eu4
-      HOI4_CONFIG_DIR: ${{ runner.temp }}/eu4-indexer-rules/config/hoi4
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,14 +38,121 @@ jobs:
           cache: npm
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-      - run: npm ci
+          dotnet-version: '9.0.315'
+      - name: Isolate game rules
+        env:
+          EU4INDEXER_HOME: ${{ runner.temp }}/eu4-indexer-rules
+          EU4_CONFIG_DIR: ${{ runner.temp }}/eu4-indexer-rules/config/eu4
+          HOI4_CONFIG_DIR: ${{ runner.temp }}/eu4-indexer-rules/config/hoi4
+        run: node --input-type=module -e "import fs from 'node:fs'; fs.appendFileSync(process.env.GITHUB_ENV,['EU4INDEXER_HOME','EU4_CONFIG_DIR','HOI4_CONFIG_DIR'].map(key=>key+'='+process.env[key]+'\n').join(''))"
+      - run: npm ci --ignore-scripts --omit=optional
+      - run: npm install --global pnpm@11.21.0 --ignore-scripts
       - run: dotnet run --project external/eu4-indexer/Eu4Indexer.Cli -- setup
       - run: npm run test:upstream
+      - run: npm run audit:engine
       - run: npm run check
-      - run: npm run build:engine
+      - run: npm run build:engine -- ${{ matrix.rid }}
       - name: Select self-contained engine
         shell: bash
-        run: node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path'; import {rid} from './src/engine/runtime.js'; fs.appendFileSync(process.env.GITHUB_ENV,'DSH_EU4_ENGINE='+path.resolve('artifacts/engine',rid(),'bin',process.platform==='win32'?'eu4indexer.exe':'eu4indexer')+'\n')"
+        run: node --input-type=module -e "import fs from 'node:fs'; import path from 'node:path'; import {rid} from './dist/engine/runtime.js'; fs.appendFileSync(process.env.GITHUB_ENV,'DSH_EU4_ENGINE='+path.resolve('artifacts/engine',rid(),'bin',process.platform==='win32'?'eu4indexer.exe':'eu4indexer')+'\n')"
       - run: npm run test:integration
-      - run: npm pack
+      - run: npm run pack:engines -- ${{ matrix.rid }}
+      - run: npm pack --pack-destination artifacts/npm
+      - run: npm run test:dsh-rc1 -- --package
+      - run: npm run verify:package
+      - name: Build and test musl variant
+        if: matrix.musl
+        shell: bash
+        env:
+          MUSL_RID: ${{ matrix.musl }}
+        run: |
+          npm run build:engine -- "$MUSL_RID"
+          npm run pack:engines -- "$MUSL_RID"
+          mkdir -p artifacts/linux-inputs
+          tar --exclude=.git --exclude=node_modules --exclude=bin --exclude=obj --exclude=artifacts --exclude='packages/engine-*/engine.*' --exclude='packages/engine-*/third-party' --exclude='packages/engine-*/THIRD-PARTY-NOTICES.md' -czf artifacts/linux-inputs/source.tgz package.json package-lock.json engine.lock.json global.json .gitignore .prettierrc.json tsconfig.json tsconfig.check.json src dist scripts tests resources docs README.md CONTRIBUTING.md LICENSE CHANGELOG.md cordis.patch.yml locale packages external/eu4-indexer/skills external/eu4-indexer/docs external/eu4-indexer/LICENSE external/eu4-indexer/Eu4Indexer.Tests/fixtures
+          mkdir -p artifacts/linux-inputs/extra/artifacts/npm artifacts/linux-inputs/extra/rules
+          cp artifacts/npm/*.tgz artifacts/linux-inputs/extra/artifacts/npm/
+          cp -R "$EU4_CONFIG_DIR" artifacts/linux-inputs/extra/rules/eu4
+          cp -R "$HOI4_CONFIG_DIR" artifacts/linux-inputs/extra/rules/hoi4
+          gzip -d artifacts/linux-inputs/source.tgz
+          tar -rf artifacts/linux-inputs/source.tar -C artifacts/linux-inputs/extra artifacts rules
+          gzip artifacts/linux-inputs/source.tar
+          mv artifacts/linux-inputs/source.tar.gz artifacts/linux-inputs/source.tgz
+          cp scripts/test-linux-container.sh artifacts/linux-inputs/
+          docker run --rm -v "$PWD/artifacts/linux-inputs:/inputs:ro" node:24-alpine sh /inputs/test-linux-container.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engines-${{ matrix.rid }}
+          path: artifacts/npm/*.tgz
+          overwrite: true
+          if-no-files-found: error
+  verify-set:
+    needs: test
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact-id: ${{ steps.release-upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --global npm@11.21.2 --ignore-scripts
+      - run: npm ci --ignore-scripts --omit=optional
+      - run: npm run build
+      - name: Exercise real npm staged publishing against a loopback fixture
+        run: DSH_TEST_STAGING_NPM_CLI="$(npm root --global)/npm/bin/npm-cli.js" node --test tests/npm-staging.test.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: engines-*
+          path: artifacts/npm
+          merge-multiple: true
+      - run: node scripts/create-release-receipt.mjs
+      - uses: actions/upload-artifact@v4
+        id: release-upload
+        with:
+          name: verified-npm-release
+          path: |
+            artifacts/npm/*.tgz
+            artifacts/npm/release-set.json
+          if-no-files-found: error
+          overwrite: true
+  stage-npm:
+    if: github.event_name == 'workflow_dispatch' && inputs.stage
+    needs: verify-set
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: npm-staging
+    concurrency:
+      group: npm-staging
+      cancel-in-progress: false
+    steps:
+      - name: Require the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare an isolated npm CLI without project dependencies
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --prefix "$RUNNER_TEMP/npm-staging-cli" npm@11.21.2 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org/
+          echo "NPM_STAGE_CLI=$RUNNER_TEMP/npm-staging-cli/node_modules/npm/bin/npm-cli.js" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.verify-set.outputs.artifact-id }}
+          path: artifacts/npm
+          merge-multiple: true
+      - name: Stage updates for owner approval on npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_STAGE_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          NPM_DIST_TAG: ${{ inputs.dist_tag }}
+        run: node scripts/stage-npm.mjs

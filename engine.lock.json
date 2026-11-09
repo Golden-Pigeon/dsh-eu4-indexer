@@ -1,13 +1,43 @@
 {
   "apiVersion": 1,
   "source": "https://github.com/Golden-Pigeon/eu4-indexer.git",
-  "sourceCommit": "caed556a7bda1a8d7e068dda7e8385183b3cbcdf",
-  "releaseRepository": "Golden-Pigeon/dsh-eu4-indexer",
-  "assets": {
+  "sourceCommit": "7002d3177bca0c6a0d8bff7daacb424c1631f4f5",
+  "build": {
+    "sdkVersion": "9.0.315",
+    "sourcePathPolicy": "neutral-staging-v1"
+  },
+  "packages": {
+    "osx-x64": {
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-darwin-x64",
+      "version": "0.1.0"
+    },
     "osx-arm64": {
-      "file": "eu4indexer-osx-arm64.tar.gz",
-      "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer/releases/download/v0.1.0/eu4indexer-osx-arm64.tar.gz",
-      "sha256": "ee1b11a078c0a5b6e698e7f93b32568d01bda8095f2c9352137a0c9b2c651573"
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-darwin-arm64",
+      "version": "0.1.0"
+    },
+    "win-x64": {
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-win32-x64",
+      "version": "0.1.0"
+    },
+    "win-arm64": {
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64",
+      "version": "0.1.0"
+    },
+    "linux-x64": {
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-linux-x64",
+      "version": "0.1.0"
+    },
+    "linux-arm64": {
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-linux-arm64",
+      "version": "0.1.0"
+    },
+    "linux-musl-x64": {
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-x64",
+      "version": "0.1.0"
+    },
+    "linux-musl-arm64": {
+      "name": "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-arm64",
+      "version": "0.1.0"
     }
   }
 }

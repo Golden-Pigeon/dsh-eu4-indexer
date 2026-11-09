@@ -2,8 +2,8 @@ import http from 'node:http'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { IndexerService } from '../src/service.js'
-import { createApi } from '../src/integration/http.js'
+import { IndexerService } from '../dist/service.js'
+import { createApi } from '../dist/integration/http.js'
 const home =
     process.env.DSH_EU4_PREVIEW_HOME ??
     path.join(os.tmpdir(), 'dsh-eu4-preview'),
@@ -51,7 +51,7 @@ const server = http.createServer(async (req, res) => {
       return
     }
     const files = {
-      '/client.js': 'src/client/client.js',
+      '/client.js': 'dist/client/client.js',
       '/react.js': 'node_modules/react/umd/react.development.js',
       '/react-dom.js': 'node_modules/react-dom/umd/react-dom.development.js',
     }

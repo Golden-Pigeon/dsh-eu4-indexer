@@ -6,8 +6,8 @@ import Skills, {
   isModelInvocable,
   isUserInvocable,
 } from '@deepseek-ai/dsh-skill'
-import { registerSkills } from '../src/integration/skills.js'
-import { Config } from '../src/index.js'
+import { registerSkills } from '../dist/integration/skills.js'
+import { Config } from '../dist/index.js'
 
 async function fixture() {
   const ctx = new Context()

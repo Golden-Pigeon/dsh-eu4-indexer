@@ -1,23 +1,24 @@
 {
-  "name": "dsh-eu4-indexer",
+  "name": "@goldenpigeon/dsh-eu4-indexer",
   "version": "0.1.0",
   "description": "Manage and query EU4 and HOI4 game and mod indexes in DeepSeek Harness, with isolated query sessions.",
   "type": "module",
   "license": "MIT",
   "author": "Golden-Pigeon",
   "exports": {
-    ".": "./src/index.js",
-    "./client": "./src/client/client.js",
+    ".": "./dist/index.js",
+    "./client": "./dist/client/client.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
-    "src",
+    "dist",
     "resources",
     "locale",
     "cordis.patch.yml",
     "engine.lock.json",
     "README.md",
+    "CONTRIBUTING.md",
     "LICENSE",
     "docs",
     "CHANGELOG.md"
@@ -50,25 +51,64 @@
     "build:engine": "node scripts/build-engine.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:integration": "node --test tests/integration/*.test.mjs",
+    "test:dsh-rc1": "node scripts/test-dsh-rc1.mjs",
+    "test:desktop": "node scripts/test-dsh-rc1.mjs --desktop",
     "check": "node scripts/check.mjs",
     "preview": "node scripts/preview.mjs",
-    "prepack": "node scripts/build.mjs --bundle-engine",
-    "test:upstream": "dotnet test external/eu4-indexer/Eu4Indexer.slnx --disable-build-servers -p:UseSharedCompilation=false"
+    "prepack": "node scripts/build.mjs",
+    "test:upstream": "dotnet test external/eu4-indexer/Eu4Indexer.slnx --disable-build-servers -p:UseSharedCompilation=false",
+    "audit:engine": "node scripts/audit-engine.mjs",
+    "prepare:engines": "node scripts/prepare-engine-packages.mjs",
+    "pack:engines": "node scripts/pack-engines.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "registry:local": "node scripts/local-registry.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "compile": "node scripts/compile.mjs",
+    "typecheck": "node node_modules/typescript/bin/tsc -p tsconfig.check.json",
+    "pretest": "npm run build",
+    "pretest:integration": "npm run build",
+    "pretest:dsh-rc1": "npm run build",
+    "pretest:desktop": "npm run build",
+    "prepreview": "npm run build",
+    "preprepare:engines": "npm run compile",
+    "prebuild:engine": "npm run compile"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1",
     "@deepseek-ai/dsh-mcp-client": "0.2.2-rc.1",
     "@deepseek-ai/dsh-skill": "0.2.2-rc.1",
     "@deepseek-ai/dsh-tool-skill": "0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.19.0",
-    "jsdom": "^29.1.1",
+    "@types/node": "^24.19.2",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "cross-spawn": "7.0.6",
+    "jsdom": "^31.0.0",
     "playwright": "^1.56.1",
     "prettier": "3.8.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer.git"
-  }
+  },
+  "optionalDependencies": {
+    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-x64": "0.1.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-arm64": "0.1.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-win32-x64": "0.1.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64": "0.1.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-x64": "0.1.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-arm64": "0.1.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-x64": "0.1.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-arm64": "0.1.0"
+  },
+  "overrides": {
+    "@modelcontextprotocol/client": "2.3.0",
+    "undici": "8.12.4",
+    "zod": "4.6.7"
+  },
+  "types": "./dist/index.d.ts"
 }

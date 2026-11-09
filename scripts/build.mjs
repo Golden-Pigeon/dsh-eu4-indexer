@@ -1,6 +1,28 @@
-import { mkdir, readFile, writeFile, cp } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, cp, rm } from 'node:fs/promises'
 import path from 'node:path'
+import { compile } from './compile.mjs'
+import { verifyUpstreamSource } from './lib/upstream-source.mjs'
 const root = path.resolve(import.meta.dirname, '..')
+const pkg = JSON.parse(await readFile(path.join(root, 'package.json')))
+const lock = JSON.parse(await readFile(path.join(root, 'engine.lock.json')))
+verifyUpstreamSource(root, lock)
+const sdk = JSON.parse(await readFile(path.join(root, 'global.json')))
+if (sdk.sdk.version !== lock.build?.sdkVersion)
+  throw new Error('global.json SDK does not match engine.lock.json')
+await compile()
+const { platforms } = await import('../dist/engine/platforms.js')
+if (Object.keys(lock.packages).length !== Object.keys(platforms).length)
+  throw new Error('Run npm run prepare:engines after changing platforms')
+for (const [target, platform] of Object.entries(platforms)) {
+  if (
+    pkg.optionalDependencies?.[platform.name] !== pkg.version ||
+    lock.packages[target]?.version !== pkg.version ||
+    lock.packages[target]?.name !== platform.name
+  )
+    throw new Error(
+      `Stale engine dependency ${target}; run npm run prepare:engines`,
+    )
+}
 for (const game of ['eu4', 'hoi4'])
   for (const language of ['en', 'zh']) {
     const source = path.join(
@@ -46,16 +68,9 @@ await cp(
   path.join(root, 'resources/docs/dependencies.md'),
 )
 console.log('Built four game/language skills from the pinned submodule.')
-if (process.argv.includes('--bundle-engine')) {
-  const manifest = JSON.parse(
-    await readFile(path.join(root, 'engine.lock.json'), 'utf8'),
-  )
-  if (!Object.keys(manifest.assets).length)
-    throw new Error('Build at least one self-contained engine before packaging')
-  await mkdir(path.join(root, 'resources/archives'), { recursive: true })
-  for (const asset of Object.values(manifest.assets))
-    await cp(
-      path.join(root, 'artifacts', asset.file),
-      path.join(root, 'resources/archives', asset.file),
-    )
-}
+// Remove obsolete bundles so a previous local build cannot bloat the main npm package.
+await rm(path.join(root, 'resources/archives'), {
+  recursive: true,
+  force: true,
+})
+await rm(path.join(root, 'resources/engine'), { recursive: true, force: true })

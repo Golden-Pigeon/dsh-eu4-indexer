@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process'
 import { DatabaseSync } from 'node:sqlite'
 import { copyFile } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
-import { Engine } from '../../src/engine/runtime.js'
+import { Engine } from '../../dist/engine/runtime.js'
 const root = path.resolve(import.meta.dirname, '../..'),
   upstream = path.join(root, 'external/eu4-indexer')
 const executable =

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import os from 'node:os'
 import path from 'node:path'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { IndexerService } from '../src/service.js'
+import { IndexerService } from '../dist/service.js'
 test('unload cancels short management requests and awaits their cleanup', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'e4-shutdown-'))
   let started,

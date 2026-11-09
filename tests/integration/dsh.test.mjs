@@ -6,11 +6,13 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import Tools from '@deepseek-ai/dsh-tools'
+import { ToolExecutionPipeline } from '@deepseek-ai/dsh-tools/pipeline'
 import Skills, { isModelInvocable } from '@deepseek-ai/dsh-skill'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import * as Plugin from '../../src/index.js'
-import { Engine } from '../../src/engine/runtime.js'
+import * as Connection from '@deepseek-ai/dsh-client-connection'
+import * as Plugin from '../../dist/index.js'
+import { Engine } from '../../dist/engine/runtime.js'
 const upstream = path.resolve(import.meta.dirname, '../../external/eu4-indexer')
 const executable =
   process.env.DSH_EU4_ENGINE ??
@@ -64,18 +66,39 @@ test(
       ctx.provide('workingDirectory', { ensure: async () => home })
       handles.push(ctx.plugin(ToolSkill))
       await handles.at(-1).await()
-      const disposeConnection = ctx.provide('connection', {
-        rpc: {
-          intercept(route, predicate, handler) {
-            assert.equal(route, '/api')
-            assert.equal(predicate('eu4-indexer/dispatch'), true)
-            rpc = handler
-            return () => {
-              rpc = null
-            }
-          },
+      let credentialRecord
+      ctx.provide('credentials', {
+        async modifyRecord(_key, mutate) {
+          credentialRecord = await mutate(credentialRecord)
+          return credentialRecord
         },
       })
+      const connectionPlugin = ctx.plugin(Connection)
+      handles.push(connectionPlugin)
+      await connectionPlugin.await()
+      const connection = ctx.get('connection')
+      // A real DSH host has already assigned /api's single interceptor to Gateway.
+      connection.rpc.intercept(
+        '/api',
+        (endpoint) => endpoint === 'fixture/gateway',
+        async () => ({ ok: true, value: 'gateway still works' }),
+      )
+      const shared = connection.createSharedFetchHandler('/api')
+      rpc = async (method, payload, signal, peer = connection.browserPeer) =>
+        shared.fetch(
+          new Request(`http://localhost/api/${method}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            signal,
+            body: JSON.stringify({
+              type: 'client-request',
+              rpcId: 'integration',
+              method,
+              payload,
+            }),
+          }),
+          peer,
+        )
       for (const id of ['one', 'two']) {
         const agent = { id }
         const scope = createScope(ctx, agent)
@@ -90,6 +113,35 @@ test(
       })
       handles.push(plugin)
       await plugin.await()
+      assert.equal(
+        (
+          await shared.fetch(
+            new Request('http://localhost/api/eu4-indexer/dispatch', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: '{',
+            }),
+            connection.browserPeer,
+          )
+        ).status,
+        400,
+      )
+      assert.equal(
+        (
+          await shared.fetch(
+            new Request('http://localhost/api/eu4-indexer/dispatch', {
+              method: 'POST',
+              body: 'not JSON',
+            }),
+            connection.browserPeer,
+          )
+        ).status,
+        415,
+      )
+      assert.equal(
+        (await rpc('eu4-indexer/dispatch', { operation: 'unknown' })).status,
+        200,
+      )
       const skills = await ctx.get('skills').list()
       assert.equal(skills.length, 6)
       assert.deepEqual(
@@ -129,21 +181,39 @@ test(
         'eu4-indexer/dispatch',
         { operation: 'state' },
         new AbortController().signal,
-        { principal: { kind: 'shared' } },
+        connection.createPeer({ principal: { kind: 'shared' } }),
       )
-      assert.equal(forbidden.ok, false)
+      assert.equal(forbidden.status, 403)
+      assert.equal(
+        (await (await rpc('fixture/gateway', {})).json()).result.value,
+        'gateway still works',
+      )
       const owner = async (request) => {
-        const r = await rpc(
+        const response = await rpc(
           'eu4-indexer/dispatch',
           request,
           new AbortController().signal,
-          { principal: { kind: 'owner' } },
         )
+        assert.equal(response.status, 200)
+        const envelope = await response.json()
+        assert.equal(envelope.type, 'server-response')
+        assert.equal(envelope.rpcId, 'integration')
+        const r = envelope.result
         assert.equal(r.ok, true, JSON.stringify(r))
         return r.value
       }
       await owner({ operation: 'bind', sessionId: 'one', name: 'eu4' })
       await owner({ operation: 'bind', sessionId: 'two', name: 'hoi4' })
+      // rc.1 clear/resume replaces the Agent but preserves its session id.
+      const oldAgent = agents.get('one')
+      await ctx.parallel('agent/disposed', { agent: oldAgent })
+      const resumedAgent = { id: 'one' }
+      const resumedScope = createScope(ctx, resumedAgent)
+      scopes.push(resumedScope)
+      resumedAgent.ctx = resumedScope.ctx
+      agents.set('one', resumedAgent)
+      await ctx.serial('agent/created', { agent: resumedAgent })
+      await ctx.parallel('agent/disposed', { agent: oldAgent })
       const tool = (agent, name) =>
         ctx
           .get('tools')
@@ -151,11 +221,24 @@ test(
           .find((d) => d.name === `mcp__eu4__${name}`)
       assert.ok(tool(agents.get('one'), 'read_query'))
       assert.ok(tool(agents.get('two'), 'read_query'))
-      const run = (agent, name, args) =>
-        tool(agent, name).execute(args, {
+      const pipeline = new ToolExecutionPipeline(ctx)
+      let callId = 0
+      const run = async (agent, name, args) => {
+        const prepared = await pipeline.prepare({
+          callId: `integration-${++callId}`,
+          name: `mcp__eu4__${name}`,
+          arguments: args,
           agent,
           signal: new AbortController().signal,
         })
+        const outcome =
+          prepared.kind === 'dispatch'
+            ? await pipeline.dispatch(prepared.exec)
+            : prepared
+        const result = await pipeline.complete(prepared.exec, outcome)
+        assert.notEqual(result.isError, true, texts(result))
+        return result
+      }
       const [a, b] = await Promise.all(
         [...agents.values()].map((agent) =>
           run(agent, 'read_query', {
@@ -165,6 +248,72 @@ test(
       )
       assert.match(texts(a), /eu4/)
       assert.match(texts(b), /hoi4/)
+      const registry = await engine.call({ operation: 'list' })
+      const database = (name) =>
+        registry.databases.find((db) => db.name === name).path
+      // Replacing a registration must replace affected live MCP clients too.
+      await owner({
+        operation: 'register',
+        name: 'eu4',
+        path: database('hoi4'),
+      })
+      assert.match(
+        texts(
+          await run(agents.get('one'), 'read_query', {
+            sql: "SELECT value FROM meta WHERE key='game_id'",
+          }),
+        ),
+        /hoi4/,
+      )
+      await owner({ operation: 'register', name: 'eu4', path: database('eu4') })
+      assert.match(
+        texts(
+          await run(agents.get('one'), 'read_query', {
+            sql: "SELECT value FROM meta WHERE key='game_id'",
+          }),
+        ),
+        /eu4/,
+      )
+      assert.match(
+        texts(
+          await run(agents.get('two'), 'read_query', {
+            sql: "SELECT value FROM meta WHERE key='game_id'",
+          }),
+        ),
+        /hoi4/,
+      )
+      assert.equal(
+        (await owner({ operation: 'configure', executablePath: executable }))
+          .ready,
+        true,
+      )
+      for (const [id, game] of [
+        ['one', 'eu4'],
+        ['two', 'hoi4'],
+      ])
+        assert.match(
+          texts(
+            await run(agents.get(id), 'read_query', {
+              sql: "SELECT value FROM meta WHERE key='game_id'",
+            }),
+          ),
+          new RegExp(game),
+        )
+      const nativeVersion = texts(
+        await run(agents.get('one'), 'read_query', {
+          sql: 'SELECT sqlite_version() AS native_version',
+        }),
+      ).match(/\b(\d+)\.(\d+)\.(\d+)\b/)
+      assert.ok(
+        nativeVersion,
+        'The running engine must report its native SQLite version',
+      )
+      const [major, minor, patch] = nativeVersion.slice(1).map(Number)
+      assert.ok(
+        major > 3 ||
+          (major === 3 && (minor > 50 || (minor === 50 && patch >= 2))),
+        `Vulnerable native SQLite: ${nativeVersion[0]}`,
+      )
       assert.match(
         texts(
           await run(agents.get('two'), 'what_does_it_do', {
@@ -175,6 +324,55 @@ test(
         /doctrine_excludes/,
       )
       await run(agents.get('one'), 'select_database', { name: 'hoi4' })
+      const refresh = await owner({
+        operation: 'refresh',
+        name: 'hoi4',
+        game: 'hoi4',
+      })
+      let rebuilt
+      for (let i = 0; i < 200; i++) {
+        rebuilt = (await owner({ operation: 'tasks' })).find(
+          (task) => task.id === refresh.id,
+        )
+        if (!['queued', 'running', 'cancelling'].includes(rebuilt.state)) break
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      assert.equal(rebuilt.state, 'succeeded', JSON.stringify(rebuilt))
+      assert.equal(rebuilt.warnings, undefined)
+      const afterRefresh = await owner({ operation: 'state' })
+      assert.equal(
+        afterRefresh.sessions.find((s) => s.id === 'one').index,
+        'eu4',
+      )
+      assert.equal(
+        afterRefresh.sessions.find((s) => s.id === 'two').index,
+        'hoi4',
+      )
+      assert.match(
+        texts(
+          await run(agents.get('one'), 'read_query', {
+            sql: "SELECT value FROM meta WHERE key='game_id'",
+          }),
+        ),
+        /eu4/,
+      )
+      await run(agents.get('one'), 'select_database', { name: 'hoi4' })
+      await owner({ operation: 'unbind', sessionId: 'two' })
+      const selectedState = await owner({ operation: 'state' })
+      assert.equal(
+        selectedState.sessions.find((s) => s.id === 'one').index,
+        'hoi4',
+      )
+      assert.equal(selectedState.bindings.one, 'eu4')
+      const blockedResponse = await rpc(
+        'eu4-indexer/dispatch',
+        { operation: 'remove', name: 'hoi4', deleteFile: true },
+        new AbortController().signal,
+      )
+      const blocked = (await blockedResponse.json()).result
+      assert.equal(blocked.ok, false)
+      assert.equal(blocked.error.details.code, 'index_in_use')
+      await owner({ operation: 'bind', sessionId: 'two', name: 'hoi4' })
       assert.match(
         texts(
           await run(agents.get('two'), 'read_query', {
@@ -190,7 +388,13 @@ test(
       handles.pop()
       assert.equal(tool(agents.get('two'), 'read_query'), undefined)
       assert.equal((await ctx.get('skills').list()).length, 0)
-      disposeConnection()
+      assert.equal(
+        (await rpc('eu4-indexer/dispatch', { operation: 'state' })).status,
+        404,
+      )
+      assert.equal((await rpc('fixture/gateway', {})).status, 200)
+      await connectionPlugin.dispose()
+      handles.pop()
       const headless = ctx.plugin(Plugin, {
         home,
         executablePath: executable,

@@ -1,4 +1,5 @@
 node_modules/
+/.secret/
 dist/
 artifacts/
 coverage/
@@ -7,3 +8,8 @@ coverage/
 .codegraph/
 resources/archives/
 *.tgz
+packages/engine-*/engine.json
+packages/engine-*/engine.tar.gz
+packages/engine-*/engine.zip
+packages/engine-*/THIRD-PARTY-NOTICES.md
+packages/engine-*/third-party/
