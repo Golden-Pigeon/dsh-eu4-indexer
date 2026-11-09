@@ -1,7 +1,7 @@
 {
   "apiVersion": 1,
   "source": "https://github.com/Golden-Pigeon/eu4-indexer.git",
-  "sourceCommit": "7002d3177bca0c6a0d8bff7daacb424c1631f4f5",
+  "sourceCommit": "50d399a5c6b03e278e117284b83979114e560a48",
   "build": {
     "sdkVersion": "9.0.315",
     "sourcePathPolicy": "neutral-staging-v1"

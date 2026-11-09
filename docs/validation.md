@@ -33,19 +33,34 @@ instance; see [isolation instructions](../CONTRIBUTING.md#isolated-web-validatio
 
 ## Platform coverage
 
-| Platform                                | Executed coverage                                                                                                                                                                                                                        |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS ARM64                             | After the scope migration: strict checks, type contracts and 94 unit/browser tests; two original rc.1 installed-package integrations; npm/pnpm installation, platform selection, public types and offline recovery; real rc.1 Web checks |
-| Linux glibc x64                         | After the scope migration: 94 unit/browser tests, two real-engine integrations, two original rc.1 installed-package integrations, npm/pnpm installation and offline recovery                                                             |
-| Linux musl x64                          | The same complete regression scope as glibc, in an Alpine container                                                                                                                                                                      |
-| macOS x64                               | Earlier two real-engine integrations through Rosetta; the final TS/TSX checks were not rerun on x64                                                                                                                                      |
-| Windows x64                             | Upstream PR #10 passed build, installation, CLI, MCP and management checks on a GitHub Windows runner; this plugin's npm package has not been run on Windows                                                                             |
-| Windows ARM64, Linux ARM64 glibc / musl | Cross-built and artifact-validated; no corresponding runtime execution yet                                                                                                                                                               |
+The first real [GitHub CI run](https://github.com/Golden-Pigeon/dsh-eu4-indexer/actions/runs/42635903548)
+tested public candidate `497e27c` on all six native OS/CPU combinations. Four jobs
+passed; both Windows jobs failed during upstream tests. The complete release-set
+job and npm staging were skipped.
 
-The plugin CI defines six native OS/CPU jobs plus musl containers on both Linux
-architectures, but has not run remotely. Upstream PR #10 and post-merge main
-passed Linux/macOS/Windows smoke checks. Cross-builds and archive validation do
-not establish runtime compatibility on the target platform.
+| Platform                 | Executed coverage for candidate `497e27c`                                                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| macOS ARM64              | GitHub CI passed upstream tests, 93 plugin unit/browser tests, real-engine integrations, original rc.1 installed-package integrations and npm/pnpm installation; earlier isolated real rc.1 Web validation also passed locally |
+| macOS x64                | The same GitHub CI checks passed natively; earlier real-engine integrations had also passed through Rosetta                                                                                                                    |
+| Linux glibc / musl x64   | Native glibc and Alpine musl CI passed plugin tests, real-engine and original rc.1 package integrations, npm/pnpm platform selection and offline recovery                                                                      |
+| Linux glibc / musl ARM64 | The same glibc and musl CI checks passed on ARM64                                                                                                                                                                              |
+| Windows x64 / ARM64      | Both passed 99 upstream tests and failed 16 temporary-database cleanup cases because pooled SQLite handles kept files open; subsequent plugin build and package checks were not reached                                        |
+
+The macOS ARM64 job skipped the real npm staging regression because that platform
+job does not provide the pinned staging CLI; the complete-set job normally runs
+it. The local follow-up ran all 94 plugin tests with npm 11.21.2 and no skips.
+
+The local follow-up pins upstream `50d399a`. It closes short-lived MCP and
+refresh-input SQLite connections without pooling, clears test pools before file
+cleanup, and runs upstream in-process fixture tests on all three CI platforms.
+Three new regressions failed before the fix: native pooled handles remained open,
+and both MCP queries and refresh-input reads returned old data after same-path
+file replacement. All 118 upstream tests now pass locally with pinned EU4/HOI4
+rules. The updated upstream workflow passes actionlint. All eight engines were
+rebuilt from the fix, and both real-engine integrations pass locally. The fix has
+not yet been pushed; Windows native revalidation and a complete CI-produced
+nine-package set remain required before initial npm publication. Evidence is in
+`artifacts/open-source-0.1.0/windows-fix/`.
 
 Before the scope migration, post-merge validation passed 63 unit/browser tests on
 macOS ARM64 and both x64 Linux libc variants. After moving to `@goldenpigeon`, all
@@ -82,9 +97,9 @@ unscoped tarballs were moved out of the release directory. Evidence:
 
 Upstream PR #10 passed three-platform smoke tests and was rebase-merged into main.
 Additional fixes replaced a retired macOS CI runner and corrected Windows
-management-path formatting, with real-engine regressions. The submodule pins
-merged main with the same tested source tree; all eight engines include the
-Windows fix.
+management-path formatting, with real-engine regressions. That merged source tree
+is the baseline for the local SQLite file-lifetime fix above; all eight engines
+include both corrections.
 
 Evidence includes `artifacts/upstream-merge/` and `artifacts/privacy-review/`.
 Earlier TS source reviews, behavior comparisons and Web screenshots are in
@@ -112,8 +127,9 @@ rules and secrets have not been configured or verified; finish the
 
 Real npm **11.21.2** ran against a temporary loopback registry with fake tokens.
 It wrote only to staging endpoints, uploaded identical tarball bytes and skipped
-lifecycle scripts. GitHub CI still requires an authorized push. No secrets were
-uploaded and no real npm staging, approval or publication occurred.
+lifecycle scripts. The first public CI run reached platform tests but Windows
+failures prevented release aggregation. No secrets were uploaded and no real npm
+staging, approval or publication occurred.
 
 Further regressions reject malicious tarballs even with self-consistent hashes:
 embedded `publishConfig`, changed identity or other manifest fields, private
@@ -121,7 +137,7 @@ packages, duplicate or hard-linked manifests and corrupt archives. The full entr
 point refuses these before starting any npm subprocess. Receipt creation rejects
 archives replaced after validation instead of recording new hashes. Final artifact
 handoff uses the validation job's output artifact ID. Static workflow checks pass;
-real GitHub handoff awaits an authorized push.
+real GitHub handoff awaits a passing run of the corrected candidate.
 
 That CI review passed 92 local tests; Node 24 glibc and musl containers each passed
 29 staging tests, including loopback uploads with the real pinned npm CLI. All
@@ -132,15 +148,21 @@ and containers were cleaned and independently checked. Evidence is in
 
 ## Current local status
 
-The plugin and npm packages are unpublished, and this repository's changes have
-not been pushed. Upstream privacy-history cleanup was pushed with authorization
-for that operation, then two branches and six tags were verified. Uncommitted
-upstream work was preserved. Pinned source `7002d31`, including SQLite and Windows
-path fixes, is on main and can be fetched to initialize the submodule; see
-[PR #10](https://github.com/Golden-Pigeon/eu4-indexer/pull/10). Later pushes,
-remote tags and releases each require explicit authorization. See
-[history and third-party content](privacy.md#history-and-third-party-content)
-for read-only PR refs and GitHub caches.
+The plugin and all nine npm packages remain unpublished. The public
+[GitHub repository](https://github.com/Golden-Pigeon/dsh-eu4-indexer) has candidate
+`497e27c` on `main`. The follow-up SQLite file-lifetime fix is committed locally
+upstream as `50d399a`; the plugin lock now pins it, but neither follow-up has been
+pushed. Source availability and Windows CI must be confirmed before using that
+pin for a public release. Each subsequent push, remote tag and release requires
+explicit authorization for that operation.
+
+Upstream privacy-history cleanup was previously pushed with authorization and
+two branches plus six tags were verified. Uncommitted work in the separate
+upstream checkout was preserved. The earlier management, session, HOI4, SQLite
+security and Windows path fixes are on main; see
+[PR #10](https://github.com/Golden-Pigeon/eu4-indexer/pull/10). Read-only PR refs
+and GitHub caches are covered in
+[history and third-party content](privacy.md#history-and-third-party-content).
 
 Development dependency audits do not establish that all user-host dependencies
 are free of advisories. rc.1 compatibility requires no host SDK upgrade. See

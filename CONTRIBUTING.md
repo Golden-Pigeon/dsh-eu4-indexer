@@ -24,10 +24,12 @@ npm run check
 ```
 
 Optional dependencies are omitted during source development because the platform
-packages are not yet published. The pinned upstream commit `7002d31` is available
-remotely. Upstream [PR #10](https://github.com/Golden-Pigeon/eu4-indexer/pull/10)
-merged the management, session isolation, HOI4 rules and SQLite fixes into main.
-See [validation](docs/validation.md) for publication status and coverage history.
+packages are not yet published. `engine.lock.json` records the exact upstream
+source commit. Before sharing a new pin, ensure it is available remotely with its
+nested submodules. Upstream [PR #10](https://github.com/Golden-Pigeon/eu4-indexer/pull/10)
+merged the management, session isolation, HOI4 rules and SQLite security fixes into
+main. See [validation](docs/validation.md) for current source availability,
+publication status and coverage history.
 
 ## Conventions
 

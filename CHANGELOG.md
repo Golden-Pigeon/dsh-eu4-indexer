@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Release native SQLite handles after MCP queries and refresh-input reads, preventing Windows file locks and stale reads after same-path database replacement. Add native-handle and replacement regressions, centralize test database cleanup, and run upstream fixture tests on Linux, macOS and Windows.
+
 - Move the main package and all eight platform packages to the @goldenpigeon scope, including exact optional dependencies, npm archive names, registry routes, DSH browser registration and release receipts.
 - Check complete packed manifests against trusted source metadata before exposing npm credentials, reject archive-controlled publishConfig and ambiguous or linked manifests, and keep candidate hashes unchanged across validation. Hand verified artifacts to staging by ID, support explicit replacement on reruns, and mark staging complete only after cleanup.
 - Isolate npm staging credentials from project dependencies and builds, bind the nine verified archives to the workflow commit and exact dependency versions, use a branch-restricted environment secret, and mark partial staging as unready for approval. Run npm through an explicit CLI path with private configuration, a minimal environment and no debug logs.
@@ -46,4 +48,4 @@
 - Reuse eu4-indexer as a pinned Git submodule, with additive generic management and upstream query-session APIs.
 - Add scoped official MCP clients, generated bilingual game skills, authenticated owner-only management RPC, browser UI and local packaging/tests.
 
-- Pinned upstream source: `7002d3177bca0c6a0d8bff7daacb424c1631f4f5`.
+- Pinned upstream source: `50d399a5c6b03e278e117284b83979114e560a48`.
