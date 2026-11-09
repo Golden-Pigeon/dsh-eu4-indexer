@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { platforms } from '../dist/engine/platforms.js'
 import { compiledFiles } from './compile.mjs'
 import { npmArchiveName } from './lib/npm-package.mjs'
+import { npmArchivePaths } from './lib/npm-archive.mjs'
 const root = path.resolve(import.meta.dirname, '..')
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json')))
 const lock = JSON.parse(await readFile(path.join(root, 'engine.lock.json')))
@@ -40,9 +41,12 @@ assert.deepEqual(
   lock,
   'Main package engine lock differs from the release set; repack it',
 )
-const mainEntries = execFileSync('tar', ['-tzf', main], { encoding: 'utf8' })
-  .split('\n')
-  .filter((entry) => entry && !entry.endsWith('/'))
+const archivePaths = (archive) =>
+  npmArchivePaths(
+    execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' }),
+    process.platform === 'win32' ? '\r\n' : '\n',
+  )
+const mainEntries = archivePaths(main).filter((entry) => !entry.endsWith('/'))
 const expected = new Set(['package/package.json'])
 const compiled = compiledFiles()
 function verifyBytes(relative, bytes) {
@@ -82,9 +86,7 @@ for (const [target, platform] of Object.entries(platforms)) {
     'artifacts/npm',
     npmArchiveName(platform.name, pkg.version),
   )
-  const entries = execFileSync('tar', ['-tzf', archive], {
-    encoding: 'utf8',
-  }).split('\n')
+  const entries = archivePaths(archive)
   const json = (file) =>
     JSON.parse(
       execFileSync('tar', ['-xOf', archive, `package/${file}`], {

@@ -268,7 +268,7 @@ test('isolated runner strips Node preloads, unrelated secrets, npm config and PA
   await writeFile(
     npmCli,
     `const fs=require('fs'); console.log(JSON.stringify({
-    cwd:process.cwd(), keys:Object.keys(process.env),
+    cwd:process.cwd(), keys:Object.keys(process.env), path:process.env.PATH,
     hasToken:process.env.NODE_AUTH_TOKEN===${JSON.stringify(fakeToken)},
     config:fs.readFileSync(process.env.NPM_CONFIG_USERCONFIG,'utf8'),
     privateProject:JSON.parse(fs.readFileSync('package.json','utf8')).private,
@@ -304,9 +304,10 @@ test('isolated runner strips Node preloads, unrelated secrets, npm config and PA
     assert.equal(result.privateProject, true)
     assert.notEqual(cwd, f.directory)
     for (const key of Object.keys(values).filter(
-      (key) => key !== 'NPM_CONFIG_USERCONFIG',
+      (key) => key !== 'NPM_CONFIG_USERCONFIG' && key !== 'PATH',
     ))
       assert.ok(!result.keys.includes(key))
+    assert.equal(result.path, '')
     assert.ok(!result.config.includes(fakeToken))
     assert.ok(result.config.includes('${NODE_AUTH_TOKEN}'))
     assert.equal(result.logs, '0')

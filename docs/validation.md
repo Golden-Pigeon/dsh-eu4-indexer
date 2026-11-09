@@ -41,46 +41,52 @@ before merge; the [merged main run](https://github.com/Golden-Pigeon/eu4-indexer
 also passed on Linux, macOS and Windows.
 
 The [plugin follow-up run](https://github.com/Golden-Pigeon/dsh-eu4-indexer/actions/runs/42665715595)
-tested `dade5ef`, pinning upstream `50d399a`, on all six native combinations.
-Three jobs passed. Both Windows jobs reached plugin tests and failed there; the
-Intel Mac job exceeded a test's total time budget during original rc.1 package
-integration. Complete release-set validation and npm staging were skipped.
+tested `dade5ef`, pinning upstream `50d399a`. Windows passed all 118 upstream
+tests, then exposed tar CRLF parsing and POSIX-only assumptions in plugin tests.
+Intel Mac exceeded the Cordis/MCP integration's former 60-second total budget.
 
-| Platform                 | Executed coverage for candidate `dade5ef`                                                                                                                                                                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS ARM64              | GitHub CI passed upstream tests, 93 plugin unit/browser tests, real-engine integrations, original rc.1 installed-package integrations and npm/pnpm installation; earlier isolated real rc.1 Web validation also passed locally                                    |
-| macOS x64                | Upstream tests, 93 plugin tests and both real-engine integrations passed natively; original rc.1 package integration completed one scenario and cancelled another at its 60-second total limit, so npm/pnpm verification was not reached                          |
-| Linux glibc / musl x64   | Native glibc and Alpine musl CI passed plugin tests, real-engine and original rc.1 package integrations, npm/pnpm platform selection and offline recovery                                                                                                         |
-| Linux glibc / musl ARM64 | The same glibc and musl CI checks passed on ARM64                                                                                                                                                                                                                 |
-| Windows x64 / ARM64      | Both passed all 118 upstream tests; plugin tests reported 71 passed, 12 failed and 11 skipped. Failures exposed Windows tar CRLF handling and platform assumptions in packaging fixtures; engine packaging and original rc.1 package integration were not reached |
+The [next run](https://github.com/Golden-Pigeon/dsh-eu4-indexer/actions/runs/42670526836)
+tested `9ed6656`. Both Linux jobs and Intel Mac passed. Windows reduced its
+failures from 12 to two: complete-set validation still read tar output without
+CRLF handling, and libuv restored an omitted PATH from the parent environment.
+macOS ARM64 passed its upstream and plugin tests, then failed in F# compilation
+with an internal `LexerStore.getStoreData` error. Both repository and neutral
+staging already pin SDK 9.0.315; a fresh engine build must revalidate that failure.
+Complete-set validation and npm staging were skipped in both runs.
 
-The macOS ARM64 job skipped the real npm staging regression because that platform
-job does not provide the pinned staging CLI; the complete-set job normally runs
-it. The local follow-up runs the real npm case with npm 11.21.2 and no skips.
+| Platform                 | Latest executed native coverage                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS ARM64              | `dade5ef` passed original rc.1 package integrations and npm/pnpm checks; `9ed6656` passed 118 upstream tests and 98 plugin tests with one optional staging regression skipped, then failed during the staged engine build |
+| macOS x64                | `9ed6656` passed upstream and plugin tests, both real-engine and original rc.1 installed-package integrations, and npm/pnpm checks after the test budget correction                                                       |
+| Linux glibc / musl x64   | `9ed6656` passed plugin tests, real-engine and original rc.1 package integrations, npm/pnpm platform selection and offline recovery on both libc variants                                                                 |
+| Linux glibc / musl ARM64 | The same `9ed6656` glibc and musl checks passed on ARM64                                                                                                                                                                  |
+| Windows x64 / ARM64      | `9ed6656` passed all 118 upstream tests; plugin results were 86 passed, two failed and 11 skipped. Packaging and installed rc.1 tests remain pending                                                                      |
 
-The source pin `50d399a` closes short-lived MCP and
-refresh-input SQLite connections without pooling, clears test pools before file
-cleanup, and runs upstream in-process fixture tests on all three CI platforms.
-Three new regressions failed before the fix: native pooled handles remained open,
-and both MCP queries and refresh-input reads returned old data after same-path
-file replacement. All 118 upstream tests now pass locally with pinned EU4/HOI4
-rules. The updated upstream workflow passes actionlint. All eight engines were
-rebuilt from the fix, and both real-engine integrations pass locally. The pin is
-reachable on upstream main through merge commit `1000299`. Evidence is in
-`artifacts/open-source-0.1.0/windows-fix/` and `artifacts/open-source-0.1.0/remote-follow-up/`.
+Platform jobs omit the pinned staging CLI and skip that optional real npm case;
+the complete-set job runs it. Local verification supplies npm 11.21.2 and runs
+all 99 tests without skips.
 
-The next local correction reads Windows tar's CRLF record terminators without
-trimming control characters from filenames. Added regressions cover both line
-endings, unsafe paths, duplicate manifests and the full Windows manifest-check
-entry point. Packaging fixtures retain nonzero-exit and stop-before-later-tests
-assertions on Windows, while checking POSIX signal messages only on POSIX. The
-stale-TypeScript fixture compiles its own baseline before deliberately changing a
-source file, avoiding unrelated mismatches in a relocated build. The full local
-suite passes all 99 tests. The Cordis/MCP integration's overall budget is now 180
-seconds because the Intel CI run took nearly 59 seconds before its next run hit
-the former 60-second limit; production operation timeouts are unchanged. Native
-revalidation and a complete CI-produced nine-package set remain required before
-initial npm publication.
+The source pin `50d399a` closes short-lived MCP and refresh-input SQLite
+connections without pooling, clears test pools before file cleanup, and runs
+upstream fixture tests on all three platforms. Three regressions failed before
+the fix: native pooled handles remained open, and MCP queries and refresh-input
+reads returned old data after same-path replacement. All 118 upstream tests pass
+locally with pinned rules. All eight engines were rebuilt locally. The pin is
+reachable on upstream main through merge commit `1000299`, with the same source
+tree. Evidence is in `artifacts/open-source-0.1.0/windows-fix/` and
+`artifacts/open-source-0.1.0/remote-follow-up/`.
+
+The latest local correction reuses the checked tar path parser for both main and
+engine archives during full release verification. LF/CRLF, unsafe-path,
+duplicate-manifest and full Windows manifest-check regressions pass. npm children
+receive an explicit empty PATH, preventing libuv's Windows environment fallback;
+the isolation regression failed before this change and passes after it. Packaging
+fixtures still require failed process exits and prevent later checks after
+termination; POSIX signal text is asserted only on POSIX. The stale-TypeScript
+guard still requires the deliberate source change to be detected. The real
+Cordis/MCP fixture has a 180-second overall budget; production operation timeouts
+are unchanged. Full native CI and a verified nine-package CI artifact set remain
+required before first npm publication.
 
 Before the scope migration, post-merge validation passed 63 unit/browser tests on
 macOS ARM64 and both x64 Linux libc variants. After moving to `@goldenpigeon`, all
@@ -168,14 +174,14 @@ and containers were cleaned and independently checked. Evidence is in
 
 ## Current local status
 
-The plugin and all nine npm packages remain unpublished. The public
-[GitHub repository](https://github.com/Golden-Pigeon/dsh-eu4-indexer) has candidate
-`dade5ef` on `main`. The SQLite fix `50d399a` is merged into upstream main and
-available remotely, including its nested submodule. The subsequent packaging and
-test corrections above remain local. A passing full platform run and verified
-CI-produced release set are still required before initial npm publication. Each
-subsequent push, remote tag and release requires explicit authorization for that
-operation.
+The plugin and all nine npm packages remain unpublished. The latest completed
+run recorded here tested `9ed6656` in the public
+[GitHub repository](https://github.com/Golden-Pigeon/dsh-eu4-indexer). The SQLite
+fix `50d399a` is merged into upstream main and available remotely, including its
+nested submodule. The complete-set CRLF and explicit PATH corrections above are
+the follow-up candidate. A passing full platform run and verified CI-produced
+release set are still required before initial npm publication. GitHub writes follow the maintainer's current authorization, which
+can cover necessary pushes and PR merges within an agreed open-source plan.
 
 Upstream privacy-history cleanup was previously pushed with authorization and
 two branches plus six tags were verified. Uncommitted work in the separate

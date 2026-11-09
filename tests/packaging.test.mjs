@@ -442,6 +442,7 @@ test('release verification rejects a tarball and local dist that are both stale 
       'scripts/compile.mjs',
       'scripts/verify-release.mjs',
       'scripts/lib/npm-package.mjs',
+      'scripts/lib/npm-archive.mjs',
       ...manifest.files,
     ])) {
       await mkdir(path.dirname(path.join(temp, entry)), { recursive: true })
@@ -454,13 +455,6 @@ test('release verification rejects a tarball and local dist that are both stale 
       path.join(temp, 'node_modules'),
       process.platform === 'win32' ? 'junction' : 'dir',
     )
-    // Establish the baseline in this checkout. On Windows the temporary copy
-    // can live on a different drive from the original build and its maps.
-    const baseline = spawnSync(process.execPath, ['scripts/compile.mjs'], {
-      cwd: temp,
-      encoding: 'utf8',
-    })
-    assert.equal(baseline.status, 0, baseline.stderr)
     const packageDir = path.join(temp, 'package')
     await mkdir(packageDir)
     for (const entry of ['package.json', ...manifest.files])

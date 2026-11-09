@@ -26,6 +26,8 @@ export async function stagingRunner({ npmCli, token }) {
     throw error
   }
   const env = {
+    // libuv on Windows inherits PATH when it is absent; explicitly clear it.
+    PATH: '',
     TMPDIR: cwd,
     TEMP: cwd,
     TMP: cwd,
@@ -36,7 +38,7 @@ export async function stagingRunner({ npmCli, token }) {
     NPM_CONFIG_LOGS_MAX: '0',
     NPM_CONFIG_IGNORE_SCRIPTS: 'true',
   }
-  // Required by Node on Windows; no other caller environment is forwarded.
+  // Required by Node on Windows. PATH above blocks libuv's parent-path fallback.
   if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot
   return {
     async runNpm(args) {

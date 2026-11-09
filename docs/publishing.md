@@ -19,8 +19,9 @@ new package directly exposes a public `0.0.0-stage` placeholder, so the script
 requires real public versions of all nine packages before uploading anything.
 Missing packages and packages with only placeholder versions block staging.
 
-GitHub pushes, remote tags and releases require explicit authorization for each
-operation. Editing CI or completing tests does not authorize publication.
+GitHub pushes, remote tags and releases follow the maintainer's authorization,
+which can cover an agreed open-source plan. Editing CI or completing tests alone
+does not authorize publication.
 
 ## Initial publication by the maintainer
 
@@ -82,6 +83,8 @@ The credential-bearing job neither installs project dependencies nor builds or
 executes compiled project artifacts. It runs staging scripts using only Node
 built-ins and a separately installed pinned npm CLI. npm child processes use an
 explicit CLI path, private temporary working directory and isolated configuration.
+Children receive an explicit empty `PATH`, preventing Windows libuv from filling
+an omitted value from the parent process.
 They do not inherit project `.npmrc`, Node preload, proxy settings or unrelated
 secrets. Configuration stores only a `${NODE_AUTH_TOKEN}` placeholder; npm debug
 logs are disabled, and the temporary directory is removed afterwards.

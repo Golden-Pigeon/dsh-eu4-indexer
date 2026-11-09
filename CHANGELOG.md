@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reuse checked CRLF-aware archive paths throughout complete release-set validation, and explicitly clear npm child-process PATH to prevent Windows from restoring the caller's path.
+
 - Handle Windows tar's CRLF output in npm manifest verification without trimming unsafe filename characters. Keep subprocess and stale-source regressions portable, and allow the full Cordis/MCP integration enough time on slower native CI runners.
 
 - Release native SQLite handles after MCP queries and refresh-input reads, preventing Windows file locks and stale reads after same-path database replacement. Add native-handle and replacement regressions, centralize test database cleanup, and run upstream fixture tests on Linux, macOS and Windows.
