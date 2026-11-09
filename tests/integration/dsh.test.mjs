@@ -28,7 +28,8 @@ const texts = (result) =>
     .join('')
 test(
   'official Cordis + MCP client: scoped tools, owner RPC, skills and unload',
-  { timeout: 60000 },
+  // Includes several real index builds and MCP reconnects on slower CI runners.
+  { timeout: 180000 },
   async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'dsh-host-e2e-')),
       engine = new Engine({ home, executablePath: executable }),

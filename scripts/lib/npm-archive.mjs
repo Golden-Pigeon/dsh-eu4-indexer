@@ -10,6 +10,26 @@ const tar =
       ? '/usr/bin/tar'
       : '/bin/tar'
 
+export function npmArchivePaths(output, lineEnding) {
+  // Windows tar writes CRLF. Remove only its record terminator, so a control
+  // character inside a filename is still rejected rather than trimmed away.
+  const entries = (
+    output.endsWith(lineEnding) ? output.slice(0, -lineEnding.length) : output
+  ).split(lineEnding)
+  if (
+    entries.some(
+      (p) =>
+        !p.startsWith('package/') ||
+        p.includes('\\') ||
+        /[\x00-\x1f\x7f]/.test(p) ||
+        path.posix.normalize(p) !== p,
+    ) ||
+    entries.filter((p) => p === 'package/package.json').length !== 1
+  )
+    throw new Error('Ambiguous or unsafe npm archive paths')
+  return entries
+}
+
 /** Inspect data without extracting files or forwarding credentials to the system archive tool. */
 export async function verifyNpmManifest(archive, expected) {
   const env = { LC_ALL: 'C' }
@@ -29,18 +49,10 @@ export async function verifyNpmManifest(archive, expected) {
       throw new Error('Cannot inspect the npm archive safely')
     }
   }
-  const entries = (await run(['-tzf', archive])).trimEnd().split('\n')
-  if (
-    entries.some(
-      (p) =>
-        !p.startsWith('package/') ||
-        p.includes('\\') ||
-        /[\x00-\x1f\x7f]/.test(p) ||
-        path.posix.normalize(p) !== p,
-    ) ||
-    entries.filter((p) => p === 'package/package.json').length !== 1
+  npmArchivePaths(
+    await run(['-tzf', archive]),
+    process.platform === 'win32' ? '\r\n' : '\n',
   )
-    throw new Error('Ambiguous or unsafe npm archive paths')
   const detail = (await run(['-tvzf', archive, 'package/package.json'])).trim()
   if (!detail.startsWith('-') || detail.split('\n').length !== 1)
     throw new Error('The npm manifest must be a single regular file')

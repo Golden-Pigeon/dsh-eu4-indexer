@@ -218,7 +218,9 @@ for (const interrupted of ['build', 'typecheck'])
         0,
         'A terminated check must never report success',
       )
-      assert.match(result.stderr, /Check stopped by SIGTERM/)
+      // Windows reports TerminateProcess as an exit code, without a signal.
+      if (process.platform !== 'win32')
+        assert.match(result.stderr, /Check stopped by SIGTERM/)
       await assert.rejects(readFile(path.join(temp, 'later-tests-ran')), {
         code: 'ENOENT',
       })
@@ -452,6 +454,13 @@ test('release verification rejects a tarball and local dist that are both stale 
       path.join(temp, 'node_modules'),
       process.platform === 'win32' ? 'junction' : 'dir',
     )
+    // Establish the baseline in this checkout. On Windows the temporary copy
+    // can live on a different drive from the original build and its maps.
+    const baseline = spawnSync(process.execPath, ['scripts/compile.mjs'], {
+      cwd: temp,
+      encoding: 'utf8',
+    })
+    assert.equal(baseline.status, 0, baseline.stderr)
     const packageDir = path.join(temp, 'package')
     await mkdir(packageDir)
     for (const entry of ['package.json', ...manifest.files])

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Handle Windows tar's CRLF output in npm manifest verification without trimming unsafe filename characters. Keep subprocess and stale-source regressions portable, and allow the full Cordis/MCP integration enough time on slower native CI runners.
+
 - Release native SQLite handles after MCP queries and refresh-input reads, preventing Windows file locks and stale reads after same-path database replacement. Add native-handle and replacement regressions, centralize test database cleanup, and run upstream fixture tests on Linux, macOS and Windows.
 
 - Move the main package and all eight platform packages to the @goldenpigeon scope, including exact optional dependencies, npm archive names, registry routes, DSH browser registration and release receipts.
