@@ -46,8 +46,8 @@ Requires **DSH v0.2.2-rc.1** (declared range `>=0.2.2-rc.1 <0.3.0`) and
 Node.js 24+. The engine bundles the .NET runtime; Linux also needs the
 [platform's native libraries](docs/packaging.md#linux-native-dependencies).
 
-The packages are **not yet published to npm**. For local artifacts, see
-[local installation](docs/packaging.md#local-installation). Once published:
+Install the [published npm package](https://www.npmjs.com/package/@goldenpigeon/dsh-eu4-indexer)
+into your DSH profile:
 
 ```sh
 dsh plugin --profile web add @goldenpigeon/dsh-eu4-indexer
@@ -55,7 +55,8 @@ dsh plugin --profile web add @goldenpigeon/dsh-eu4-indexer
 
 Exact-version optional dependencies select the engine package for the host's OS,
 CPU and libc, downloading only the matching binary by default. To build from
-source, see [CONTRIBUTING.md](CONTRIBUTING.md).
+source, see [CONTRIBUTING.md](CONTRIBUTING.md); for local artifacts, see
+[local installation](docs/packaging.md#local-installation).
 
 ## Usage
 

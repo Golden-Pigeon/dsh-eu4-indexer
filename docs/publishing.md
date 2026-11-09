@@ -13,6 +13,9 @@ All packages use the `@goldenpigeon` scope: `@goldenpigeon/dsh-eu4-indexer` and
 the maintainer must confirm their npm account can publish to that organization.
 The CI token must also be restricted to these nine packages.
 
+Initial publication of all nine `0.1.0` packages is complete. Their public hashes
+match the original verified CI set; see [publication status](validation.md#publication-status).
+
 The workflow uses npm **11.21.2** with official
 [staged publishing](https://docs.npmjs.com/staged-publishing/) support. Staging a
 new package directly exposes a public `0.0.0-stage` placeholder, so the script

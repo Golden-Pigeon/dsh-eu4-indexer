@@ -98,7 +98,7 @@ ZIP archives created on Unix omit owner extension fields. Set
 
 ## Local installation
 
-The unpublished main package depends on same-version platform packages and does
+The main package depends on same-version platform packages and does
 not contain binaries itself. Its tarball alone is not a complete offline bundle.
 Pack it and the target platform package as above, then start the read-only local
 registry:

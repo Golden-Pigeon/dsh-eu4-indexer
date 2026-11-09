@@ -33,13 +33,14 @@ instance; see [isolation instructions](../CONTRIBUTING.md#isolated-web-validatio
 
 ## Platform coverage
 
-The six native jobs in the [candidate `b4ef50e` run](https://github.com/Golden-Pigeon/dsh-eu4-indexer/actions/runs/42678761966)
-all passed. Each exercised upstream fixture tests, plugin checks, real-engine
+The six native jobs and complete release-set verification in the
+[release `78699f6` run](https://github.com/Golden-Pigeon/dsh-eu4-indexer/actions/runs/42682990327)
+all passed. Each platform exercised upstream fixture tests, plugin checks, real-engine
 integration, original DSH rc.1 installed-package integration, npm/pnpm platform
 selection and offline engine recovery. Linux jobs also passed the corresponding
 Alpine musl checks.
 
-| Platform                 | Recorded native result for `b4ef50e`                                |
+| Platform                 | Recorded native result for `78699f6`                                |
 | ------------------------ | ------------------------------------------------------------------- |
 | macOS ARM64              | Passed the complete platform job                                    |
 | macOS x64                | Passed the complete platform job                                    |
@@ -48,12 +49,12 @@ Alpine musl checks.
 | Windows x64              | Passed the complete platform job and four malicious-ZIP regressions |
 | Windows ARM64            | Passed the complete platform job and four malicious-ZIP regressions |
 
-Aggregation in that run failed while inspecting merged archives. All 14 native
-tarballs are valid independently; six same-named main packages were downloaded
-concurrently into one path. The follow-up workflow uploads uniquely named engine
-archives and the tested Linux x64 main package separately, then validates their
-complete nine-package set. [Current workflow runs](https://github.com/Golden-Pigeon/dsh-eu4-indexer/actions/workflows/test.yml)
-and the source-bound release receipt establish readiness for each candidate.
+The workflow uploads uniquely named engine archives and the tested Linux x64 main
+package separately, avoiding concurrent writes to same-named main tarballs.
+The successful run produced `verified-npm-release` artifact `13703459304` with
+all nine original tarballs and their source-bound receipt. Its archive digest,
+receipt, full package contents and all nine public npm integrity values were
+verified without regenerating hashes or repacking the release.
 The [CI review history](reviews/2026-11-10-ci.md) records preceding failures,
 corrections and the aggregation investigation.
 
@@ -131,23 +132,24 @@ They cover explicit staging opt-in, zero uploads when the last package lacks an
 initial publication, incomplete summaries after partial failure, and isolation
 from Node preload, PATH replacement, external npm configuration, unrelated secrets
 and token-bearing child-process errors. Credentials must live in the
-`npm-staging` environment restricted to the default branch. Remote environment
-rules and secrets have not been configured or verified; finish the
-[publishing setup](publishing.md#staging-credentials) before enabling staging.
+`npm-staging` environment restricted to the default branch. The remote environment
+is configured with one Branch rule for `main`, no Tag rules, and the
+maintainer-provided stage-only token stored as environment secret `NPM_STAGE_TOKEN`.
+The environment and secret metadata were read back; no repository-level copy of
+the secret was created. See [publishing setup](publishing.md#staging-credentials).
 
 Real npm **11.21.2** ran against a temporary loopback registry with fake tokens.
 It wrote only to staging endpoints, uploaded identical tarball bytes and skipped
-lifecycle scripts. The first public CI run reached platform tests but Windows
-failures prevented release aggregation. No secrets were uploaded and no real npm
-staging, approval or publication occurred.
+lifecycle scripts. No live npm staging or approval has been executed. Initial
+publication of all nine real versions was performed personally by the maintainer.
 
 Further regressions reject malicious tarballs even with self-consistent hashes:
 embedded `publishConfig`, changed identity or other manifest fields, private
 packages, duplicate or hard-linked manifests and corrupt archives. The full entry
 point refuses these before starting any npm subprocess. Receipt creation rejects
 archives replaced after validation instead of recording new hashes. Final artifact
-handoff uses the validation job's output artifact ID. Static workflow checks pass;
-real GitHub handoff awaits a passing run of the corrected candidate.
+handoff uses the validation job's output artifact ID. Static workflow checks and
+the real GitHub artifact handoff passed for release `78699f6`.
 
 That CI review passed 92 local tests; Node 24 glibc and musl containers each passed
 29 staging tests, including loopback uploads with the real pinned npm CLI. All
@@ -156,15 +158,21 @@ passed. Full review after fixes found no further issues. Temporary directories
 and containers were cleaned and independently checked. Evidence is in
 `artifacts/ci-review3-*.log`. The subsequent scope-migration run is recorded above.
 
-## Current local status
+## Publication status
 
-The plugin and all nine npm packages remain unpublished. The public
-[GitHub repository](https://github.com/Golden-Pigeon/dsh-eu4-indexer) contains the
-upstream SQLite, Windows archive and rc.1 preload corrections described above.
-First publication requires a successful complete platform run and the exact
-`verified-npm-release` artifact, validated against its original source-bound
-receipt. GitHub writes follow the maintainer's current authorization, which can
-cover necessary pushes and PR merges within an agreed open-source plan.
+The maintainer published the main package and all eight platform packages as
+`0.1.0`. Every public integrity value matches the original CI receipt for
+`78699f665a4a0de8bee51817c780e7a28965e841`.
+Fresh npm and pnpm installations from the official registry on macOS ARM64 each
+installed only the matching engine and passed offline managed-engine activation
+and a management query. These checks used no npm credentials; their temporary
+directories were removed. Other platforms retain the native CI coverage above.
+
+The public [GitHub repository](https://github.com/Golden-Pigeon/dsh-eu4-indexer)
+contains the release source. Published archives and their original receipt are
+preserved unchanged; later documentation updates do not replace those bytes.
+GitHub writes follow the maintainer's current authorization, which can cover
+necessary pushes and PR merges within an agreed open-source plan.
 
 Upstream privacy-history cleanup was previously pushed with authorization and
 two branches plus six tags were verified. Uncommitted work in the separate

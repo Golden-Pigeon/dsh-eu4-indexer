@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0 — 2026-11-10
+
 - Upload platform engines separately from the tested Linux x64 main package, preventing concurrent same-name writes during CI release-set aggregation.
 
 - Normalize the Windows ZIP extraction root before checking entries, allowing 8.3 temporary paths while retaining traversal and link rejection. Add native Windows malicious-ZIP regressions.

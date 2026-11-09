@@ -23,8 +23,8 @@ npm run build
 npm run check
 ```
 
-Optional dependencies are omitted during source development because the platform
-packages are not yet published. `engine.lock.json` records the exact upstream
+Source development builds engines separately, so omitting optional dependencies
+avoids downloading packaged platform binaries. `engine.lock.json` records the exact upstream
 source commit. Before sharing a new pin, ensure it is available remotely with its
 nested submodules. Upstream [PR #10](https://github.com/Golden-Pigeon/eu4-indexer/pull/10)
 merged the management, session isolation, HOI4 rules and SQLite security fixes into
