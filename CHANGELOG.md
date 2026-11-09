@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upload platform engines separately from the tested Linux x64 main package, preventing concurrent same-name writes during CI release-set aggregation.
+
 - Normalize the Windows ZIP extraction root before checking entries, allowing 8.3 temporary paths while retaining traversal and link rejection. Add native Windows malicious-ZIP regressions.
 
 - Pass the original DSH rc.1 integration preload as a file URL so Windows runs the installed-package tests instead of interpreting a drive letter as a URL scheme.
