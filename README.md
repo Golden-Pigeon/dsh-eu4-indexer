@@ -48,6 +48,21 @@ Requires **DSH v0.2.2-rc.1** (declared range `>=0.2.2-rc.1 <0.3.0`) and
 Node.js 24+. The engine bundles the .NET runtime; Linux also needs the
 [platform's native libraries](docs/packaging.md#linux-native-dependencies).
 
+### From the DSH Desktop plugin page
+
+Open **Plugins → Add plugin** in DSH Desktop and enter the full npm package name:
+
+```text
+@goldenpigeon/dsh-eu4-indexer
+```
+
+Install the package, then restart DSH if prompted. Open the plugin's
+**Game script indexes** configuration page to select game sources and build an
+index. The matching engine and bundled EU4/HOI4 rules are installed with the
+plugin.
+
+### From the CLI
+
 Install the [published npm package](https://www.npmjs.com/package/@goldenpigeon/dsh-eu4-indexer)
 into your DSH profile:
 
