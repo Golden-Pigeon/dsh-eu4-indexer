@@ -4,6 +4,9 @@
 
 ## 0.1.1 — 2026-11-10
 
+- Compare canonical packaged entry-point paths during npm/pnpm verification,
+  accepting Windows path separators while still requiring the exact dependency binary.
+
 - Normalize upstream skill line endings before adapting them, so Windows builds
   remove obsolete setup instructions and generate the same four skills as Unix.
 

@@ -255,7 +255,16 @@ void job
         .version,
       lock.engineVersion,
     )
-    assert.ok((await engine.resolve()).startsWith(dependencyRoot + path.sep))
+    assert.equal(
+      await realpath(await engine.resolve()),
+      await realpath(
+        path.join(
+          dependencyRoot,
+          'bin',
+          process.platform === 'win32' ? 'eu4indexer.exe' : 'eu4indexer',
+        ),
+      ),
+    )
     await access(path.join(dependencyRoot, 'bin/third-party/cwtools/LICENSE'))
     await access(
       path.join(
