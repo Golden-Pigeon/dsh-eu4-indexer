@@ -45,7 +45,6 @@ async function fixture(t) {
   const runNpm = async (args) => {
     calls.push(args)
     if (args[0] === '--version') return stagingNpmVersion
-    if (args[1] === 'list') return '[]'
     assert.deepEqual(args.slice(0, 2), ['stage', 'publish'])
     const item = packages.find((p) => p.archive === args[2])
     return JSON.stringify({
@@ -103,14 +102,18 @@ test('public preflight omits authentication, refuses redirects and fails closed 
 test('invalid npm JSON cannot expose raw subprocess output', async (t) => {
   const f = await fixture(t)
   const original = f.runNpm
-  f.runNpm = async (args) =>
-    args[1] === 'list' ? 'fixture-sensitive-output' : original(args)
+  f.runNpm = async (args) => {
+    if (args[1] !== 'publish') return original(args)
+    f.calls.push(args)
+    return 'fixture-sensitive-output'
+  }
   await assert.rejects(stageUpdates(f), (error) => {
     assert.match(error.message, /Invalid npm JSON response/)
     assert.ok(!error.message.includes('fixture-sensitive-output'))
     return true
   })
-  assert.equal(writes(f).length, 0)
+  assert.equal(writes(f).length, 1)
+  assert.equal(f.receipts.length, 0)
 })
 
 test('stage the checked archives in order, disable lifecycle scripts, and report approval IDs', async (t) => {
@@ -130,24 +133,48 @@ test('stage the checked archives in order, disable lifecycle scripts, and report
   }
   assert.ok(
     f.calls.every(
-      (a) =>
-        a[0] === '--version' ||
-        (a[0] === 'stage' && ['list', 'publish'].includes(a[1])),
+      (a) => a[0] === '--version' || (a[0] === 'stage' && a[1] === 'publish'),
     ),
   )
 })
 
-test('preflight the whole set and refuse missing initial publications, placeholders, conflicts and registry failures', async (t) => {
-  for (const reason of [
-    'missing',
-    'placeholder',
-    'published',
-    'pending',
-    'registry',
-  ]) {
+test('reuse already public engine versions and stage only the changed plugin', async (t) => {
+  const f = await fixture(t)
+  const published = []
+  f.onPublished = async (item) => published.push(item.name)
+  f.getPackage = async (name) => ({
+    name,
+    versions: name === f.packages[0].name ? { '0.4.0': {} } : { '0.1.0': {} },
+  })
+  const result = await stageUpdates(f)
+  assert.deepEqual(published, [f.packages[0].name])
+  assert.equal(result.length, 1)
+  assert.deepEqual(
+    writes(f).map((args) => args[2]),
+    [f.packages[1].archive],
+  )
+})
+
+test('already public release sets need no staging writes on a rerun', async (t) => {
+  const f = await fixture(t)
+  const published = []
+  f.onPublished = async (item) => published.push(item.name)
+  f.getPackage = async (name) => ({
+    name,
+    versions: { [f.packages.find((item) => item.name === name).version]: {} },
+  })
+  assert.deepEqual(await stageUpdates(f), [])
+  assert.equal(writes(f).length, 0)
+  assert.deepEqual(
+    published,
+    f.packages.map((item) => item.name),
+  )
+})
+
+test('preflight the whole set and refuse missing initial publications, placeholders and registry failures', async (t) => {
+  for (const reason of ['missing', 'placeholder', 'registry']) {
     await t.test(reason, async (t) => {
       const f = await fixture(t)
-      const original = f.runNpm
       f.getPackage = async (name) => {
         if (name !== f.packages.at(-1).name)
           return { name, versions: { '0.1.0': {} } }
@@ -156,21 +183,9 @@ test('preflight the whole set and refuse missing initial publications, placehold
         return {
           name,
           versions:
-            reason === 'placeholder'
-              ? { '0.0.0-stage': {} }
-              : reason === 'published'
-                ? { '0.2.0': {} }
-                : { '0.1.0': {} },
+            reason === 'placeholder' ? { '0.0.0-stage': {} } : { '0.1.0': {} },
         }
       }
-      f.runNpm = async (args) =>
-        reason === 'pending' &&
-        args[1] === 'list' &&
-        args[2] === f.packages.at(-1).name
-          ? JSON.stringify([
-              { packageName: args[2], version: '0.2.0', id: stageId },
-            ])
-          : original(args)
       await assert.rejects(stageUpdates(f))
       assert.equal(writes(f).length, 0)
       assert.equal(f.receipts.length, 0)
@@ -201,20 +216,35 @@ test('reject an unsupported npm, unsafe tags, prerelease latest, duplicate sets 
       if (reason === 'receipt')
         f.packages[0].integrity = 'sha512-wrong-verified-receipt'
       const original = f.runNpm
+      const originalMetadata = f.getPackage
+      f.getPackage = async (name) => {
+        const metadata = await originalMetadata(name)
+        if (reason === 'changed' && name === f.packages.at(-1).name)
+          await writeFile(f.packages[0].archive, 'replaced after preflight')
+        return metadata
+      }
       f.runNpm = async (args) => {
         if (reason === 'npm' && args[0] === '--version') return '11.8.0'
-        if (
-          reason === 'changed' &&
-          args[1] === 'list' &&
-          args[2] === f.packages.at(-1).name
-        )
-          await writeFile(f.packages[0].archive, 'replaced after preflight')
         return original(args)
       }
       await assert.rejects(stageUpdates(f))
       assert.equal(writes(f).length, 0)
     })
   }
+})
+
+test('registry version conflicts stop staging without retrying or querying stages', async (t) => {
+  const f = await fixture(t)
+  const original = f.runNpm
+  f.runNpm = async (args) => {
+    if (args[0] === '--version') return original(args)
+    assert.deepEqual(args.slice(0, 2), ['stage', 'publish'])
+    f.calls.push(args)
+    throw new Error('fixture registry version conflict')
+  }
+  await assert.rejects(stageUpdates(f), /registry version conflict/)
+  assert.equal(writes(f).length, 1)
+  assert.equal(f.receipts.length, 0)
 })
 
 test('preserve receipts on partial failure and stop rather than approving, retrying or publishing', async (t) => {
@@ -298,11 +328,11 @@ test(
     const npmCli = process.env.DSH_TEST_STAGING_NPM_CLI
     const requests = []
     const posted = []
+    const authenticated = []
+    let rejectAuthenticated = false
     const server = http.createServer(async (req, res) => {
       requests.push(`${req.method} ${req.url}`)
       res.setHeader('content-type', 'application/json')
-      if (req.method === 'GET' && req.url.startsWith('/-/stage?'))
-        return res.end(JSON.stringify({ items: [], total: 0 }))
       if (
         req.method === 'GET' &&
         f.packages.some((p) => p.name === decodeURIComponent(req.url.slice(1)))
@@ -313,6 +343,11 @@ test(
           ),
         )
       if (req.method === 'POST' && req.url.startsWith('/-/stage/package/')) {
+        authenticated.push(req.headers.authorization === 'Bearer fixture-only')
+        if (!authenticated.at(-1) || rejectAuthenticated)
+          return res
+            .writeHead(401)
+            .end(JSON.stringify({ error: 'fixture authentication missing' }))
         const chunks = []
         for await (const chunk of req) chunks.push(chunk)
         posted.push(JSON.parse(Buffer.concat(chunks)))
@@ -327,12 +362,6 @@ test(
       server.listen(0, '127.0.0.1', resolve)
     })
     t.after(() => new Promise((resolve) => server.close(resolve)))
-    const registry = `http://127.0.0.1:${server.address().port}/`
-    const config = path.join(f.root, 'npmrc')
-    await writeFile(
-      config,
-      `registry=${registry}\n//127.0.0.1:${server.address().port}/:_authToken=fixture-only\n`,
-    )
     const sentinel = path.join(f.root, 'lifecycle-ran')
     for (const item of f.packages) {
       const directory = path.join(f.root, item.name)
@@ -349,15 +378,19 @@ test(
       )
       execFileSync('tar', ['-czf', item.archive, '-C', directory, 'package'])
     }
-    // Keep the production runner unchanged; this test-only wrapper redirects npm to loopback.
+    // Redirect transport only: keep the production registry, npmrc and token interpolation intact.
     const wrapper = path.join(f.root, 'npm-loopback.cjs')
     await writeFile(
       wrapper,
       `
       const cli=${JSON.stringify(npmCli)};
-      process.argv=[process.execPath,cli,...process.argv.slice(2).map(a=>
-        a.startsWith('--registry=')?${JSON.stringify(`--registry=${registry}`)}:a)];
-      process.env.NPM_CONFIG_USERCONFIG=${JSON.stringify(config)};
+      const http=require('node:http'),https=require('node:https');
+      https.request=options=>{
+        if(options.hostname!=='registry.npmjs.org') throw new Error('Unexpected fixture host');
+        return http.request({...options,protocol:'http:',hostname:'127.0.0.1',
+          port:${server.address().port},agent:undefined});
+      };
+      process.argv=[process.execPath,cli,...process.argv.slice(2)];
       require(cli);
     `,
     )
@@ -370,6 +403,8 @@ test(
     const results = await stageUpdates(f)
     assert.equal(results.length, 2)
     assert.equal(posted.length, 2)
+    assert.deepEqual(authenticated, [true, true])
+    assert.ok(!requests.some((r) => r.startsWith('GET /-/stage')))
     assert.ok(
       requests.every(
         (r) => r.startsWith('GET ') || r.startsWith('POST /-/stage/package/'),
@@ -384,5 +419,9 @@ test(
       assert.equal(body['dist-tags'].latest, f.packages[index].version)
     }
     await assert.rejects(access(sentinel), { code: 'ENOENT' })
+    rejectAuthenticated = true
+    await assert.rejects(stageUpdates(f), /stage publish; npm E401/)
+    assert.equal(posted.length, 2)
+    assert.deepEqual(authenticated, [true, true, true])
   },
 )

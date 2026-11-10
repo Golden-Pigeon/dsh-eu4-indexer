@@ -44,6 +44,7 @@ export async function stageUpdates({
   runNpm,
   getPackage = publicPackage,
   onStaged = async () => {},
+  onPublished = async () => {},
 }) {
   if (!['latest', 'next', 'beta'].includes(tag))
     throw new Error('Choose an explicit npm tag: latest, next or beta')
@@ -73,6 +74,8 @@ export async function stageUpdates({
   }
   if ((await runNpm(['--version'])).trim() !== stagingNpmVersion)
     throw new Error(`Staging requires the pinned npm ${stagingNpmVersion}`)
+  const pending = []
+  const published = []
   for (const item of packages) {
     const metadata = await getPackage(item.name)
     if (
@@ -85,24 +88,14 @@ export async function stageUpdates({
       throw new Error(
         `Initial publication must be performed by the owner: ${item.name}`,
       )
-    if (Object.hasOwn(metadata.versions, item.version))
-      throw new Error(`Version is already public: ${item.name}@${item.version}`)
-    const pending = npmJson(
-      await runNpm(['stage', 'list', item.name, '--json', ...registryFlags]),
-    )
-    if (!Array.isArray(pending))
-      throw new Error('Invalid npm stage list response')
-    if (
-      pending.some(
-        (p) => p.packageName === item.name && p.version === item.version,
-      )
-    )
-      throw new Error(
-        `Version is already staged; review it on npm before retrying: ${item.name}@${item.version}`,
-      )
+    if (Object.hasOwn(metadata.versions, item.version)) published.push(item)
+    else pending.push(item)
+    // Stage-only credentials need not authorize stage list. The registry's shared
+    // version index rejects staged/public conflicts; never retry a failed write.
   }
+  for (const item of published) await onPublished(item)
   const staged = []
-  for (const item of packages) {
+  for (const item of pending) {
     // Detect local archive changes after preflight, including a replaced symlink.
     if (
       !(await lstat(item.archive)).isFile() ||

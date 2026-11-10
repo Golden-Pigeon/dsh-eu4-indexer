@@ -3,6 +3,46 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 
+const diagnosticCodes = new Set([
+  'E400',
+  'E401',
+  'E403',
+  'E404',
+  'E409',
+  'E422',
+  'E429',
+  'E500',
+  'E502',
+  'E503',
+  'E504',
+  'EOTP',
+  'ENEEDAUTH',
+  'EUSAGE',
+  'EPUBLISHCONFLICT',
+  'EACCES',
+  'ENOENT',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ETIMEDOUT',
+  'ERR_SOCKET_TIMEOUT',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'CERT_HAS_EXPIRED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+])
+
+function failureCode(stdout) {
+  try {
+    const code = JSON.parse(stdout).error?.code
+    return diagnosticCodes.has(code) ? `; npm ${code}` : ''
+  } catch {
+    return ''
+  }
+}
+
 /** No project cwd, PATH-based npm lookup, inherited npm config, Node preloads, or debug logs. */
 export async function stagingRunner({ npmCli, token }) {
   if (!path.isAbsolute(npmCli ?? '') || !(await lstat(npmCli)).isFile())
@@ -43,13 +83,8 @@ export async function stagingRunner({ npmCli, token }) {
   return {
     async runNpm(args) {
       const version = args.length === 1 && args[0] === '--version'
-      if (
-        !version &&
-        !(args[0] === 'stage' && ['list', 'publish'].includes(args[1]))
-      )
-        throw new Error(
-          'Only npm version, stage list and stage publish are allowed',
-        )
+      if (!version && !(args[0] === 'stage' && args[1] === 'publish'))
+        throw new Error('Only npm version and stage publish are allowed')
       return new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [npmCli, ...args], {
           cwd,
@@ -77,7 +112,7 @@ export async function stagingRunner({ npmCli, token }) {
           if (code !== 0 || overflow)
             reject(
               new Error(
-                `npm staging command failed (${signal ?? code}); inspect npm before retrying`,
+                `npm staging command failed (${signal ?? code}; ${version ? 'version' : `stage ${args[1]}`}${overflow ? '' : failureCode(Buffer.concat(stdout).toString('utf8'))}); inspect npm before retrying`,
               ),
             )
           else resolve(Buffer.concat(stdout).toString('utf8'))

@@ -326,7 +326,29 @@ Earlier TS source reviews, behavior comparisons and Web screenshots are in
 `artifacts/ts-final-review/`, `artifacts/ts-review/` and `artifacts/ts-review2/`.
 See the [history](reviews/2026-11-08.md) for chronology.
 
-## npm staging validation
+## Tag-driven CI review
+
+The local replacement separates main pushes, PR compatibility checks and release
+tag pushes. `actionlint` validates all entry points and the reusable package build.
+The temporary workflow with fixed 0.1.1 commit, run and artifact IDs is removed.
+Tag guards, first-publication protection, reused public engine versions, partial
+receipts and credential isolation are exercised locally. Real npm 11.21.2 uses
+the unchanged production npmrc while test transport routes requests to loopback;
+tests verify its authorization header and a registry `401` response.
+
+Read-only inspection found the remote `npm-staging` environment still allows only
+the `main` branch. It must be migrated to a `v*` Tag rule before the tag workflow
+can receive its secret. The local workflow change does not make that remote edit.
+Earlier live stage attempts returned `E401`, including `stage publish` itself;
+removing `stage list` did not resolve authentication. A direct read-only request
+with the old local token also returned `401`. The maintainer subsequently
+confirmed the old token was faulty and replaced it; the existing GitHub
+environment secret was updated from that file without another live probe or
+staging attempt. Local tests establish that the runner constructs the
+authentication header. No Actions run is used as a substitute for local
+validation of this change.
+
+## Earlier npm staging validation
 
 The workflow and scripts passed local actionlint, compilation, type, unit and
 browser checks. Regressions cover whole-set initial-publication guards,
@@ -337,19 +359,19 @@ Actual npm packlists exclude `.secret/` and token files; tests do not read token
 Credential review removed project dependency installation and builds from the
 staging job. Release receipts bind the workflow commit, nine archive hashes and
 exact dependencies. Full-script regressions run without `node_modules` or `dist`.
-They cover explicit staging opt-in, zero uploads when the last package lacks an
+They covered the old explicit staging opt-in, zero uploads when the last package lacks an
 initial publication, incomplete summaries after partial failure, and isolation
 from Node preload, PATH replacement, external npm configuration, unrelated secrets
 and token-bearing child-process errors. Credentials must live in the
-`npm-staging` environment restricted to the default branch. The remote environment
-is configured with one Branch rule for `main`, no Tag rules, and the
+`npm-staging` environment, originally restricted to the default branch. That setup
+used one Branch rule for `main`, no Tag rules, and the
 maintainer-provided stage-only token stored as environment secret `NPM_STAGE_TOKEN`.
 The environment and secret metadata were read back; no repository-level copy of
 the secret was created. See [publishing setup](publishing.md#staging-credentials).
 
 Real npm **11.21.2** ran against a temporary loopback registry with fake tokens.
 It wrote only to staging endpoints, uploaded identical tarball bytes and skipped
-lifecycle scripts. No live npm staging or approval has been executed. Initial
+lifecycle scripts. At that review no live npm staging or approval had been executed. Initial
 publication of all nine real versions was performed personally by the maintainer.
 
 Further regressions reject malicious tarballs even with self-consistent hashes:

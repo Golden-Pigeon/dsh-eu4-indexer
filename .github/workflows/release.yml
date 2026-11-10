@@ -1,0 +1,98 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate-tag:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Require a version-matching tag on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFile } from 'node:fs/promises'
+          import { releaseTag } from './scripts/lib/release.mjs'
+          const { version } = JSON.parse(await readFile('package.json'))
+          releaseTag(version)
+          JS
+          git merge-base --is-ancestor "$GITHUB_SHA" "refs/remotes/origin/$DEFAULT_BRANCH"
+  packages:
+    needs: validate-tag
+    uses: ./.github/workflows/package-tests.yml
+  stage-npm:
+    needs: packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: npm-staging
+    concurrency:
+      group: npm-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare an isolated npm CLI
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --prefix "$RUNNER_TEMP/npm-staging-cli" npm@11.21.2 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org/
+          echo "NPM_STAGE_CLI=$RUNNER_TEMP/npm-staging-cli/node_modules/npm/bin/npm-cli.js" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.packages.outputs.artifact-id }}
+          path: artifacts/npm
+          merge-multiple: true
+      - name: Stage updates for owner approval
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_STAGE_TOKEN }}
+        run: node scripts/stage-npm.mjs
+  github-release:
+    needs: [packages, stage-npm]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.packages.outputs.artifact-id }}
+          path: artifacts/npm
+          merge-multiple: true
+      - name: Verify the original release set
+        run: |
+          node --input-type=module <<'JS'
+          import { readReleaseReceipt } from './scripts/lib/release-receipt.mjs'
+          await readReleaseReceipt(process.cwd(), process.env.GITHUB_SHA)
+          JS
+      - name: Extract release notes
+        run: node scripts/release-notes.mjs > "$RUNNER_TEMP/release-notes.md"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          overwrite_files: false
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/npm/*.tgz
+            artifacts/npm/release-set.json

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Separate main-branch checks, PR compatibility validation and tag-triggered
+  releases. Automatically stage npm updates and publish GitHub release assets
+  from the same verified set; remove the temporary release-specific retry workflow.
+- Reuse public engine versions for plugin-only updates. Check real npm
+  authentication locally without replacing the production npm configuration.
+
 ## 0.1.1 — 2026-11-10
 
 - Compare canonical packaged entry-point paths during npm/pnpm verification,

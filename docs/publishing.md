@@ -5,8 +5,8 @@
 The maintainer must personally perform the first publication of all nine packages:
 the main package and eight platform packages. Subsequent versions can only be
 staged by CI, then approved personally by the maintainer with npm 2FA. CI does not
-directly publish, approve or reject packages, or create remote tags or GitHub
-Releases.
+directly publish, approve or reject npm packages. A version tag triggers staging
+and a GitHub Release automatically; the maintainer still approves npm publication.
 
 All packages use the `@goldenpigeon` scope: `@goldenpigeon/dsh-eu4-indexer` and
 `@goldenpigeon/dsh-eu4-indexer-engine-<platform-suffix>`. Before initial publication,
@@ -53,11 +53,14 @@ only after every package has been published initially.
 ## Staging credentials
 
 In GitHub repository settings, create an **`npm-staging` environment**. Set
-**Deployment branches and tags** to **Selected branches and tags**, with a Branch
-rule for the default branch only (for example, `main`) and no Tag rules. Save
+**Deployment branches and tags** to **Selected branches and tags**, with a Tag
+rule for `v*` and no Branch rules. Save
 **`NPM_STAGE_TOKEN`** as an environment secret. GitHub checks branch restrictions
-before the job receives credentials; the workflow's default-branch check is an
-additional guard. See [GitHub environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+before the job receives credentials. The release workflow also requires the tag
+to match `package.json` and point to a commit on the default branch.
+When migrating from the old manual flow, replace its `main` Branch rule with the
+`v*` Tag rule before the next release; changing workflow files does not update
+the remote environment. See [GitHub environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
 
 Do not store the token as a repository or organization secret, where workflows on
 other branches could reference it. If such a secret already exists, migrate it
@@ -108,14 +111,27 @@ tarball cannot override proxy, TLS or other npm settings through `publishConfig`
 
 ## Subsequent versions: CI stages, maintainer approves
 
+CI follows the same event separation as
+[dsh-remote](https://github.com/Golden-Pigeon/dsh-remote/tree/main/.github/workflows):
+
+| Event          | Action                                                                              |
+| -------------- | ----------------------------------------------------------------------------------- |
+| Push to `main` | Build, typecheck and unit checks                                                    |
+| Pull request   | Full native compatibility, npm installation and release-set validation              |
+| Push `v*` tag  | Validate tag, build and validate packages, stage npm updates, create GitHub Release |
+
+The PR and release workflows share `package-tests.yml`. It has only a
+`workflow_call` trigger and no npm credentials. Ordinary branches, PRs and manual
+dispatches cannot stage packages.
+
 1. Update the main version and pin the upstream engine release, then run
    `npm run prepare:engines` to synchronize platform packages and exact dependencies.
    Platform versions follow upstream, independently of the main version. Update
    locks and the changelog, and test locally.
-2. With authorization for the push, land changes on the default branch. In GitHub
-   Actions, choose **Run workflow** on `package-tests`, select the default branch,
-   set **stage** to `true` and choose `latest`, `next` or `beta`. `latest` rejects
-   prereleases. Staging is disabled by default and blocked on other branches.
+2. Land reviewed changes on the default branch. With authorization, create and
+   push a tag matching the main version, such as `v0.1.2`. This automatically
+   starts `release.yml`; no separate manual staging dispatch is needed. Stable
+   versions use `latest`, and prereleases use `next`.
 3. Credential-free jobs build and test all platforms, musl containers and original
    rc.1 installed packages. Aggregation records the source commit and all nine
    candidate names, exact versions, filenames and SHA-512 hashes before full
@@ -126,40 +142,37 @@ tarball cannot override proxy, TLS or other npm settings through `publishConfig`
    versions, hashes and full manifests. It invokes
    `npm stage publish <tarball> --ignore-scripts` for platform packages before the
    main package, using the official registry and no artifact lifecycle scripts.
-4. CI preflights all nine packages: initial publication must be complete, target
-   versions must be neither public nor staged, and local artifacts must exist and
-   remain unchanged. Each successful stage immediately adds the name, version,
+4. CI preflights all nine packages: initial publication must be complete, and local
+   artifacts must exist and remain unchanged. Already public versions are reused,
+   allowing a plugin update to keep the same upstream engine version.
+   It uses only `npm stage publish`, without requiring permission to list stages.
+   npm's shared version index rejects already staged or published versions; any
+   failure stops the job without retrying. Each successful stage adds the name, version,
    tag, stage ID and SHA-512 to the Actions summary. npm's returned name, version
    and integrity must match the uploaded tarball.
-5. The summary stays **IN PROGRESS** until all nine stages succeed and local cleanup
-   finishes, then becomes **COMPLETE**. Wait for the entire staging job to succeed.
+5. The summary stays **IN PROGRESS** until every package is staged or already
+   public and local cleanup finishes, then becomes **COMPLETE**. Wait for the
+   entire staging job to succeed.
    In npmjs.com's **Staged Packages**, inspect each stage and download tarballs if
-   needed. Personally approve the eight platform packages with 2FA, confirm they
+   needed. Personally approve pending platform packages with 2FA, confirm they
    are installable, then approve the main package. In your own terminal you can
    also use `npm stage view <stage-id>`, `npm stage download <stage-id>` and
    `npm stage approve <stage-id>`. Approval commands never run in CI.
 
-Triggering GitHub Actions and approving publication on npm are separate actions.
-**Run workflow** requests staging only; the workflow has no direct-publication
-step bypassing maintainer approval.
+Pushing a release tag requests automatic staging and GitHub publication. It does
+not approve publication on npm; the workflow has no direct-publication step.
 
 ## GitHub Releases
 
-Create a GitHub Release for each plugin release as well as staging its npm set.
-With authorization, tag the exact default-branch commit that passed the release
-workflow, using the main plugin version, such as `v0.1.1`. The eight platform
-packages may use a different upstream-aligned version, such as `0.4.0`.
+After successful staging, the separate `github-release` job publishes the tagged
+release automatically. It downloads the same verified artifact by ID, verifies
+its source commit and package hashes again, and attaches all nine original
+tarballs and `release-set.json` without rebuilding. Notes come from the matching
+version in `CHANGELOG.md`; `Unreleased` and older entries are excluded.
 
-Download the successful run's `verified-npm-release` artifact and verify its source
-commit, complete nine-package set and recorded hashes. Attach those same nine
-tarballs and `release-set.json` to the GitHub Release; do not rebuild or repack
-them. Include the changes, the upstream version and the npm status in the release
-notes. A GitHub Release can be available while npm packages still await the
-maintainer's personal approval. Approve all engine packages before the main npm
-package, as described above.
-
-GitHub tagging and release creation remain separate authorized operations; the
-credential-isolated npm staging job does not gain GitHub write permissions.
+Only this job receives GitHub `contents: write`; it has no npm token. The staging
+job retains `contents: read`. A GitHub Release can be available while npm stages
+await personal approval. Existing release assets are not overwritten on rerun.
 
 ## Failure recovery
 
@@ -173,13 +186,20 @@ Staging downloads by validation's unique artifact ID, never by selecting a name
 again. If a later rerun deleted that ID, download fails rather than silently
 substituting another artifact.
 
-Inspect the nine packages' staged state first. An existing stage for the same
-version blocks any new uploads on rerun. The maintainer can personally reject the
-existing stages, then rerun the complete release set. Do not approve a partial
-set before the whole staging job succeeds. Already public versions cannot be
-replaced; prepare and test a new common version. Tags cannot be changed after
-staging; reject the old stage before restaging with another tag.
+Inspect the summary and npm staged state first. An existing pending version is
+rejected by the registry, stopping the job at that package. The maintainer can
+personally reject a partial set before retrying; CI never rejects or approves it.
+Already public versions are skipped. Do not approve a partial set. Published
+content cannot be replaced: change the plugin version or publish a new upstream
+engine version as appropriate. Distribution tags cannot be changed after staging;
+reject the old stage before restaging with another distribution tag.
+
+Fix configuration before retrying a failed job on the original tag. Rerunning
+only the failed staging job reuses its verified artifact; it does not require a
+temporary workflow, hardcoded run IDs, replaced source metadata or repeated builds.
 
 Local regressions use a temporary loopback registry and fake credentials. They
-check that the real npm CLI writes only to staging endpoints, uploads identical
-bytes and does not run lifecycle scripts. They never write to real npm endpoints.
+check real npm with the production npmrc and fake tokens: authentication headers,
+registry `401` handling, staging-only endpoints, identical bytes and disabled
+lifecycle scripts. They never write to real npm endpoints. Run `actionlint` locally
+before submitting workflow changes.

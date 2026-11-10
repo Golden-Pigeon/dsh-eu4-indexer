@@ -300,7 +300,11 @@ test('isolated runner strips Node preloads, unrelated secrets, npm config and PA
     const version = JSON.parse(await runner.runNpm(['--version']))
     assert.equal(version.hasToken, false)
     const result = JSON.parse(
-      await runner.runNpm(['stage', 'list', '@goldenpigeon/dsh-eu4-indexer']),
+      await runner.runNpm([
+        'stage',
+        'publish',
+        '@goldenpigeon/dsh-eu4-indexer',
+      ]),
     )
     cwd = result.cwd
     assert.equal(result.hasToken, true)
@@ -317,6 +321,7 @@ test('isolated runner strips Node preloads, unrelated secrets, npm config and PA
     await assert.rejects(access(sentinel), { code: 'ENOENT' })
     for (const args of [
       ['publish'],
+      ['stage', 'list'],
       ['stage', 'approve', 'fixture'],
       ['stage', 'reject', 'fixture'],
     ])
@@ -337,7 +342,7 @@ test('subprocess failures never echo token-bearing stdout or stderr', async (t) 
   const runner = await stagingRunner({ npmCli, token: fakeToken })
   try {
     await assert.rejects(
-      runner.runNpm(['stage', 'list', '@goldenpigeon/dsh-eu4-indexer']),
+      runner.runNpm(['stage', 'publish', '@goldenpigeon/dsh-eu4-indexer']),
       (error) => {
         assert.ok(!error.message.includes(fakeToken))
         assert.match(error.message, /staging command failed/)
@@ -349,16 +354,46 @@ test('subprocess failures never echo token-bearing stdout or stderr', async (t) 
   }
 })
 
+test('subprocess diagnostics expose only the operation and allowlisted npm error codes', async (t) => {
+  const f = await fixture(t)
+  for (const [code, expected] of [
+    ['E403', '; npm E403'],
+    [fakeToken, ''],
+  ]) {
+    const npmCli = path.join(f.directory, 'diagnostic-npm.cjs')
+    await writeFile(
+      npmCli,
+      `console.log(JSON.stringify({error:{code:${JSON.stringify(code)},summary:process.env.NODE_AUTH_TOKEN}})); process.stderr.write(process.env.NODE_AUTH_TOKEN); process.exit(1)`,
+    )
+    const runner = await stagingRunner({ npmCli, token: fakeToken })
+    try {
+      await assert.rejects(
+        runner.runNpm(['stage', 'publish', '@goldenpigeon/dsh-eu4-indexer']),
+        (error) => {
+          assert.equal(
+            error.message,
+            `npm staging command failed (1; stage publish${expected}); inspect npm before retrying`,
+          )
+          assert.ok(!error.message.includes(fakeToken))
+          return true
+        },
+      )
+    } finally {
+      await runner.close()
+    }
+  }
+})
+
 async function entryFixture(
   t,
   {
     missingInitial = false,
     failMain = false,
-    stage = 'true',
-    eventName = 'workflow_dispatch',
-    ref = 'refs/heads/main',
+    eventName = 'push',
+    ref = 'refs/tags/v0.2.0',
     sourceCommit = commit,
     unsafeManifest = false,
+    publicEngines = false,
   } = {},
 ) {
   const f = await fixture(t)
@@ -378,6 +413,7 @@ async function entryFixture(
   for (const file of [
     'stage-npm.mjs',
     'lib/npm-staging.mjs',
+    'lib/release.mjs',
     'lib/npm-staging-runner.mjs',
     'lib/release-receipt.mjs',
     'lib/npm-archive.mjs',
@@ -395,7 +431,6 @@ async function entryFixture(
     const args=process.argv.slice(2),packages=${JSON.stringify(f.packages)};
     fs.appendFileSync(${JSON.stringify(requests)},JSON.stringify(args)+'\\n');
     if(args[0]==='--version') console.log('11.21.2');
-    else if(args[1]==='list') console.log('[]');
     else {
       const p=packages.find(p=>fs.realpathSync(p.archive)===fs.realpathSync(args[2]));
       if(${failMain} && p.name==='@goldenpigeon/dsh-eu4-indexer') {
@@ -412,12 +447,11 @@ async function entryFixture(
     `globalThis.fetch=async url=>{
     const name=decodeURIComponent(new URL(url).pathname.slice(1));
     const missing=${missingInitial} && name==='@goldenpigeon/dsh-eu4-indexer';
-    return {status:missing?404:200,ok:!missing,json:async()=>({name,versions:{'0.1.0':{}}})}
+    return {status:missing?404:200,ok:!missing,json:async()=>({name,versions:
+      ${publicEngines} && name.includes('-engine-')?{'0.4.0':{}}:{'0.1.0':{}}})}
   }`,
   )
-  const eventFile = path.join(f.directory, 'event.json')
   const summary = path.join(f.directory, 'summary.md')
-  await writeFile(eventFile, JSON.stringify({ inputs: { stage } }))
   const env = {
     TMPDIR: f.directory,
     TEMP: f.directory,
@@ -425,11 +459,8 @@ async function entryFixture(
     GITHUB_ACTIONS: 'true',
     GITHUB_EVENT_NAME: eventName,
     GITHUB_REF: ref,
-    DEFAULT_BRANCH: 'main',
     GITHUB_SHA: sourceCommit,
-    GITHUB_EVENT_PATH: eventFile,
     GITHUB_STEP_SUMMARY: summary,
-    NPM_DIST_TAG: 'latest',
     NPM_STAGE_CLI: npmCli,
     NODE_AUTH_TOKEN: fakeToken,
   }
@@ -464,11 +495,13 @@ async function entryFixture(
   return { result, calls, text }
 }
 
-test('credential entry rejects disabled staging, push events, other branches and another source commit before invoking npm', async (t) => {
+test('credential entry accepts only matching release tag pushes and rejects another artifact commit before invoking npm', async (t) => {
   for (const [options, message] of [
-    [{ stage: 'false' }, /explicitly request npm staging/],
-    [{ eventName: 'push' }, /manual run on the default branch/],
-    [{ ref: 'refs/heads/untrusted' }, /manual run on the default branch/],
+    [{ eventName: 'workflow_dispatch' }, /tag push matching/],
+    [{ eventName: 'pull_request' }, /tag push matching/],
+    [{ ref: 'refs/heads/main' }, /tag push matching/],
+    [{ ref: 'refs/heads/untrusted' }, /tag push matching/],
+    [{ ref: 'refs/tags/v0.3.0' }, /tag push matching/],
     [{ sourceCommit: '2'.repeat(40) }, /another source commit/],
   ]) {
     const { result, calls, text } = await entryFixture(t, options)
@@ -490,6 +523,14 @@ test('credential entry blocks every upload when the last package has not been in
   assert.match(text, /Staging stopped/)
 })
 
+test('credential entry completes plugin-only releases while reporting all eight public engines', async (t) => {
+  const { result, calls, text } = await entryFixture(t, { publicEngines: true })
+  assert.equal(result.code, 0, result.stderr)
+  assert.equal(calls.filter((c) => c[1] === 'publish').length, 1)
+  assert.equal((text.match(/Already public/g) ?? []).length, 8)
+  assert.match(text, /\nCOMPLETE:/)
+})
+
 test('credential entry rejects archive-controlled npm settings before any credential-bearing subprocess', async (t) => {
   const { result, calls, text } = await entryFixture(t, {
     unsafeManifest: true,
@@ -507,9 +548,7 @@ test('credential entry distinguishes complete staging from partial failure witho
     assert.equal(calls.filter((c) => c[1] === 'publish').length, 9)
     assert.ok(
       calls.every(
-        (c) =>
-          c[0] === '--version' ||
-          (c[0] === 'stage' && ['list', 'publish'].includes(c[1])),
+        (c) => c[0] === '--version' || (c[0] === 'stage' && c[1] === 'publish'),
       ),
     )
     assert.match(text, /IN PROGRESS/)
