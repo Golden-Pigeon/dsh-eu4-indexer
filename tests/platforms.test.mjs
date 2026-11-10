@@ -24,11 +24,12 @@ test('npm dependencies map every supported OS, architecture and Linux libc to ex
         assert.equal(matches.length, 1)
         const [target, meta] = matches[0]
         assert.equal(rid(os, arch, libc), target)
-        assert.equal(pkg.optionalDependencies[meta.name], pkg.version)
+        assert.equal(pkg.optionalDependencies[meta.name], lock.engineVersion)
         assert.equal(lock.packages[target].name, meta.name)
+        assert.equal(lock.packages[target].version, lock.engineVersion)
         assert.equal(
           npmLock.packages[`node_modules/${meta.name}`].version,
-          pkg.version,
+          lock.engineVersion,
         )
         const child = JSON.parse(
           await readFile(
@@ -38,6 +39,7 @@ test('npm dependencies map every supported OS, architecture and Linux libc to ex
             ),
           ),
         )
+        assert.equal(child.version, lock.engineVersion)
         assert.deepEqual(child.os, meta.os)
         assert.deepEqual(child.cpu, meta.cpu)
         assert.deepEqual(child.libc, meta.libc)

@@ -99,7 +99,7 @@ agent 在回答中应使用标准中译，可在括号中附带社区俗称。
 （由 `Eu4Indexer.Cli` 构建）。索引已解析模组覆盖和本地化解码，并包含派生的
 **引用图**（`refs` 表）描述内容之间的连接关系。
 
-如果 `eu4` 工具不可用，告知用户需要先构建索引并注册服务器（见文末"设置"），
+如果游戏查询工具不可用，使用文末的 DSH 管理工具检查引擎、构建索引并绑定当前会话；不要另行注册 MCP 服务器，
 不要用训练数据猜测。
 
 **每次会话开始时调用 `describe_schema`** 查看可用的 `entity_type`、`ref_kind` 值、
@@ -401,9 +401,9 @@ SELECT value FROM v_effective_defines WHERE define_key = 'NFocus.FOCUS_POINT_DAY
 - `resolve_symbol` 支持 CWT 模板生成的实际修正名，例如 `production_cost_arms_factory_factor`。修正的多个作用类别以 `|` 分隔。
 - `analyze_effects` 支持能力的 `one_time_effect`、特质的 `on_add`/`on_remove`、海军将领钩子与决议效果块；新增部署和战略区域条件按触发器标记。
 - 数学表达式保留有序脚本树，不代表已知的运行时或存档数值。通过脚本树检查 `pow`、`root`、`mod`、`lerp`、三角函数和除法 `if_zero`；变量写入支持 `which`、`var` 和简写赋值。效果分析会明确标注表达式，不得凭空给出计算结果。
-- 已有索引需要安装更新后的规则并刷新，才能获得新增派生关系。
+- 规则随引擎提供和更新；更新引擎后刷新已有索引，才能获得新增派生关系。
 
 
 ## DSH 设置与会话
 
-使用 `eu4_indexer_manage` 的 `state` / `list` 检查索引，通过 `bind` 选择当前会话的默认索引。缺少引擎或规则时，在插件页安装引擎并运行 `setup`；通过 `index` 创建索引。耗时操作返回任务 id，使用 `tasks` 查看进度、`cancel_task` 取消。游戏查询使用 `mcp__eu4__` 工具。每个会话都有独立的数据库选择；不得修改其他会话的绑定。不得运行上游 `install` 注册其他客户端。
+引擎和 EU4/HOI4 游戏规则随插件自动安装和更新。先调用 `eu4_indexer_tools` 并传入 `enabled: true` 加载当前会话的工具，再调用 `eu4_indexer_state` 检查 `engine.ready` 和规则状态，再调用 `eu4_indexer_list` 查看索引。通过 `eu4_indexer_index` 创建索引，`eu4_indexer_refresh` 刷新索引，`eu4_indexer_bind` 选择当前会话的默认索引。构建操作返回任务 id，使用 `eu4_indexer_tasks` 轮询直到终态，失败时报告任务错误；可用 `eu4_indexer_cancel_task` 取消。缺少引擎或规则时，报告具体错误并启用 optionalDependencies 重新安装插件；配置了外部路径时先修正路径。游戏查询使用 `mcp__eu4__` 工具。每个会话的数据库选择互相隔离，不得修改其他会话绑定。转向无关工作时，可用 `eu4_indexer_tools` 的 `enabled: false` 卸载工具；后台任务和默认绑定会保留。宿主重启或恢复聊天后需要再次加载。不得运行上游 `install` 注册其他客户端。

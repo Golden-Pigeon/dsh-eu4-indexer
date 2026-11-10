@@ -9,6 +9,7 @@ coverage/
 resources/archives/
 *.tgz
 packages/engine-*/engine.json
+packages/engine-*/bin/
 packages/engine-*/engine.tar.gz
 packages/engine-*/engine.zip
 packages/engine-*/THIRD-PARTY-NOTICES.md

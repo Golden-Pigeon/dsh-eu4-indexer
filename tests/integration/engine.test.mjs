@@ -109,13 +109,20 @@ test(
             game,
             'example-game',
           ),
-          configDir:
-            process.env[game.toUpperCase() + '_CONFIG_DIR'] ??
-            path.join(os.homedir(), '.eu4indexer/config', game),
           languages: ['english'],
         })
         assert.equal(output.report.foreignKeyViolations, 0)
         assert.ok(output.report.entityCount > 0)
+        const metadata = (
+          await engine.call({ operation: 'inspect', name: game })
+        ).meta
+        assert.equal(metadata.config_source, 'bundled')
+        // A plugin upgrade moves the executable; refresh must not reuse the old bundle path.
+        const obsolete = new DatabaseSync(output.index.path)
+        obsolete
+          .prepare("UPDATE meta SET value=? WHERE key='config_repo_path'")
+          .run(path.join(home, 'obsolete-engine', game))
+        obsolete.close()
       }
       const original = (
         await engine.call({ operation: 'list' })

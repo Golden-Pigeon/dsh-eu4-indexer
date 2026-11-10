@@ -15,8 +15,8 @@ if (Object.keys(lock.packages).length !== Object.keys(platforms).length)
   throw new Error('Run npm run prepare:engines after changing platforms')
 for (const [target, platform] of Object.entries(platforms)) {
   if (
-    pkg.optionalDependencies?.[platform.name] !== pkg.version ||
-    lock.packages[target]?.version !== pkg.version ||
+    pkg.optionalDependencies?.[platform.name] !== lock.engineVersion ||
+    lock.packages[target]?.version !== lock.engineVersion ||
     lock.packages[target]?.name !== platform.name
   )
     throw new Error(
@@ -37,6 +37,14 @@ for (const game of ['eu4', 'hoi4'])
     const at = skill.indexOf(heading)
     if (at >= 0) skill = skill.slice(0, at)
     skill = skill.replace(
+      'If the `eu4` tools are not available, tell the user to build an index and register\nthe server (see "Setup" at the end) instead of guessing from training data.',
+      'If game query tools are unavailable, use the DSH management tools below to check\nengine readiness, build an index and bind it to the current chat. Do not guess\nfrom training data or register another MCP server.',
+    )
+    skill = skill.replace(
+      '如果 `eu4` 工具不可用，告知用户需要先构建索引并注册服务器（见文末"设置"），',
+      '如果游戏查询工具不可用，使用文末的 DSH 管理工具检查引擎、构建索引并绑定当前会话；不要另行注册 MCP 服务器，',
+    )
+    skill = skill.replace(
       /^(---\r?\n)name: [^\r\n]+/,
       `$1name: ${game}-${language}`,
     )
@@ -48,8 +56,8 @@ for (const game of ['eu4', 'hoi4'])
     skill = skill.slice(0, bodyAt) + selection + skill.slice(bodyAt)
     skill +=
       language === 'zh'
-        ? '\n## DSH 设置与会话\n\n使用 `eu4_indexer_manage` 的 `state` / `list` 检查索引，通过 `bind` 选择当前会话的默认索引。缺少引擎或规则时，在插件页安装引擎并运行 `setup`；通过 `index` 创建索引。耗时操作返回任务 id，使用 `tasks` 查看进度、`cancel_task` 取消。游戏查询使用 `mcp__eu4__` 工具。每个会话都有独立的数据库选择；不得修改其他会话的绑定。不得运行上游 `install` 注册其他客户端。\n'
-        : '\n## DSH setup and sessions\n\nUse `eu4_indexer_manage` with `state` / `list` to inspect available indexes and `bind` to set the current session default. Install the engine in the plugin panel, run `setup` for rules, and `index` to build indexes. Long operations return a task id; inspect `tasks` until terminal or cancel with `cancel_task`. Game queries use the `mcp__eu4__` tools. Database selection is isolated per session. Do not alter other sessions or use the upstream `install` command to register other clients.\n'
+        ? '\n## DSH 设置与会话\n\n引擎和 EU4/HOI4 游戏规则随插件自动安装和更新。先调用 `eu4_indexer_tools` 并传入 `enabled: true` 加载当前会话的工具，再调用 `eu4_indexer_state` 检查 `engine.ready` 和规则状态，再调用 `eu4_indexer_list` 查看索引。通过 `eu4_indexer_index` 创建索引，`eu4_indexer_refresh` 刷新索引，`eu4_indexer_bind` 选择当前会话的默认索引。构建操作返回任务 id，使用 `eu4_indexer_tasks` 轮询直到终态，失败时报告任务错误；可用 `eu4_indexer_cancel_task` 取消。缺少引擎或规则时，报告具体错误并启用 optionalDependencies 重新安装插件；配置了外部路径时先修正路径。游戏查询使用 `mcp__eu4__` 工具。每个会话的数据库选择互相隔离，不得修改其他会话绑定。转向无关工作时，可用 `eu4_indexer_tools` 的 `enabled: false` 卸载工具；后台任务和默认绑定会保留。宿主重启或恢复聊天后需要再次加载。不得运行上游 `install` 注册其他客户端。\n'
+        : '\n## DSH configuration and sessions\n\nThe engine and EU4/HOI4 game rules are installed and updated with the plugin. First call `eu4_indexer_tools` with `enabled: true` to load tools for this chat, then use `eu4_indexer_state` to check `engine.ready` and rules, then `eu4_indexer_list` to inspect indexes. Build with `eu4_indexer_index`, rebuild with `eu4_indexer_refresh`, and select the current chat default with `eu4_indexer_bind`. Builds return a task id; poll `eu4_indexer_tasks` until terminal, report failures, or cancel with `eu4_indexer_cancel_task`. Missing engine or rule files require reinstalling the plugin with optional dependencies enabled; correct configured external paths first. Game queries use `mcp__eu4__` tools. Database selection is isolated per session; do not alter other sessions or use upstream `install` to register other clients. Unload tools with `eu4_indexer_tools` and `enabled: false` when returning to unrelated work; background tasks and saved bindings remain. Load again after a host restart or chat restoration.\n'
     const out = path.join(root, 'resources/skills', game, language)
     await mkdir(out, { recursive: true })
     await writeFile(path.join(out, 'SKILL.md'), skill)

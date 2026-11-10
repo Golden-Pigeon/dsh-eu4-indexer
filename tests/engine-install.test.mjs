@@ -7,241 +7,218 @@ import {
   readFile,
   chmod,
   rm,
-  symlink,
-  access,
+  realpath,
 } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { execFileSync, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { Engine, rid } from '../dist/engine/runtime.js'
+import { Engine, rid } from '../dist/engine/index.js'
+import { publishFiles } from '../dist/engine/package.js'
 import { IndexerService } from '../dist/service.js'
-async function fixture(link = false) {
-  const home = await mkdtemp(path.join(os.tmpdir(), 'e4-install-')),
-    bin = path.join(home, 'source/bin')
-  await mkdir(bin, { recursive: true })
-  const exe = path.join(bin, 'eu4indexer')
+
+async function fixture() {
+  const root = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), 'e4-library-')),
+  )
+  const home = path.join(root, 'user-data')
+  const name = '@fixture/engine',
+    version = '1.0.0'
+  const directory = path.join(root, 'node_modules', name)
+  const executable = path.join(
+    directory,
+    'bin',
+    process.platform === 'win32' ? 'eu4indexer.exe' : 'eu4indexer',
+  )
+  await mkdir(path.dirname(executable), { recursive: true })
   await writeFile(
-    exe,
+    executable,
     `#!${process.execPath}\nprocess.stdin.resume();console.log(JSON.stringify({apiVersion:1,type:'result',data:{apiVersion:1,engineVersion:'test'}}))`,
   )
-  await chmod(exe, 0o755)
-  if (link) await symlink('/etc/passwd', path.join(bin, 'unsafe'))
-  const file = path.join(home, 'engine.tar.gz')
-  execFileSync('tar', ['-czf', file, '-C', path.join(home, 'source'), 'bin'])
-  const archive = await readFile(file)
+  await chmod(executable, 0o755)
+  await writeFile(
+    path.join(directory, 'bin', 'runtime.dll'),
+    'complete publish tree',
+  )
+  await writeFile(
+    path.join(root, 'package.json'),
+    JSON.stringify({ name: 'fixture', private: true }),
+  )
+  await writeFile(
+    path.join(directory, 'package.json'),
+    JSON.stringify({ name, version }),
+  )
   const manifest = {
     apiVersion: 1,
     sourceCommit: 'test',
-    assets: {
-      [rid()]: {
-        url: 'https://example.invalid/engine',
-        sha256: createHash('sha256').update(archive).digest('hex'),
-      },
-    },
+    build: { sdkVersion: 'fixture' },
+    packages: { [rid()]: { name, version } },
   }
+  const receipt = {
+    formatVersion: 2,
+    apiVersion: 1,
+    sourceCommit: 'test',
+    build: manifest.build,
+    rid: rid(),
+    entryPoint: path.relative(directory, executable).split(path.sep).join('/'),
+    files: await publishFiles(directory),
+  }
+  const receiptPath = path.join(directory, 'engine.json')
+  await writeFile(receiptPath, JSON.stringify(receipt))
   return {
+    root,
     home,
+    directory,
+    executable,
     manifest,
+    receipt,
+    receiptPath,
     engine: new Engine({
       home,
+      packageRoot: root,
       manifest,
-      fetchImpl: async () => new Response(archive),
+      fetchImpl: async () => {
+        throw new Error('No runtime downloads')
+      },
     }),
-    cleanup: () => rm(home, { recursive: true, force: true }),
+    cleanup: () => rm(root, { recursive: true, force: true }),
   }
 }
-test(
-  'engine installation verifies complete archive, activates atomically and retains previous version',
-  { skip: process.platform === 'win32' },
-  async () => {
-    const f = await fixture()
-    let changing = 0,
-      changed = 0
-    try {
-      assert.equal(
-        (
-          await f.engine.install({
-            beforeActivate: async () => changing++,
-            afterActivate: async () => changed++,
-          })
-        ).ready,
-        true,
+
+test('library resolves npm binary immediately and ignores stale user-directory engines', async () => {
+  const f = await fixture()
+  try {
+    await mkdir(path.join(f.home, 'engine/current/bin'), { recursive: true })
+    await writeFile(
+      path.join(f.home, 'engine/current/bin/eu4indexer'),
+      'stale engine',
+    )
+    assert.equal(await f.engine.resolve(), f.executable)
+    const launch = await f.engine.querySession({
+      database: path.join(f.home, 'a.db'),
+      sessionId: 'chat-one',
+    })
+    assert.equal(launch.command, f.executable)
+    assert.deepEqual(launch.args, [
+      'serve',
+      '--db',
+      path.join(f.home, 'a.db'),
+      '--query-session',
+      'chat-one',
+    ])
+    assert.equal(launch.env.EU4INDEXER_HOME, f.home)
+    assert.equal(
+      await readFile(
+        path.join(f.home, 'engine/current/bin/eu4indexer'),
+        'utf8',
+      ),
+      'stale engine',
+    )
+  } finally {
+    await f.cleanup()
+  }
+})
+
+test('library checks complete publish files and all package provenance fields', async () => {
+  const f = await fixture()
+  try {
+    for (const change of [
+      { sourceCommit: 'older' },
+      { apiVersion: 0 },
+      { formatVersion: 1 },
+      { build: { sdkVersion: 'older' } },
+      { rid: 'another-platform' },
+      { entryPoint: '../outside' },
+      { files: { '../outside': '0'.repeat(64) } },
+    ]) {
+      await writeFile(
+        f.receiptPath,
+        JSON.stringify({ ...f.receipt, ...change }),
       )
-      await f.engine.install()
-      await access(path.join(f.home, 'engine/previous/bin/eu4indexer'))
-      assert.equal(changing, 1)
-      assert.equal(changed, 1)
-      const receipt = JSON.parse(
-        await readFile(path.join(f.home, 'engine/current/receipt.json')),
-      )
-      assert.equal(receipt.sourceCommit, 'test')
-    } finally {
-      await f.cleanup()
-    }
-  },
-)
-test(
-  'managed engine provenance must match the current plugin lock, with reinstall recovery',
-  { skip: process.platform === 'win32' },
-  async () => {
-    const f = await fixture()
-    const receiptPath = path.join(f.home, 'engine/current/receipt.json')
-    try {
-      await f.engine.install()
-      const original = await readFile(receiptPath, 'utf8')
-      for (const change of [
-        { sourceCommit: 'older-source' },
-        { apiVersion: 0 },
-        { build: { sdkVersion: 'older-sdk' } },
-        { rid: 'another-platform' },
-        { package: { name: 'other', version: '0.0.0' } },
-      ]) {
-        await writeFile(
-          receiptPath,
-          JSON.stringify({ ...JSON.parse(original), ...change }),
-        )
-        assert.equal((await f.engine.status()).code, 'engine_update_required')
-        await assert.rejects(f.engine.call({ operation: 'list' }), {
-          code: 'engine_update_required',
-        })
-      }
-      for (const legacy of ['{', JSON.stringify({ sourceCommit: 'test' })]) {
-        await writeFile(receiptPath, legacy)
-        assert.equal((await f.engine.status()).code, 'engine_update_required')
-      }
-      await rm(receiptPath)
-      assert.equal((await f.engine.status()).code, 'engine_update_required')
-      assert.equal((await f.engine.install()).ready, true)
-      const upgraded = new Engine({
-        home: f.home,
-        manifest: { ...f.manifest, sourceCommit: 'new-plugin-source' },
+      await assert.rejects(f.engine.resolve(), {
+        code: 'engine_package_mismatch',
       })
-      assert.equal((await upgraded.status()).code, 'engine_update_required')
-      // A deliberately configured external executable remains owner managed.
-      upgraded.explicit = path.join(f.home, 'engine/current/bin/eu4indexer')
-      assert.equal((await upgraded.status()).ready, true)
-      const service = new IndexerService({
-        home: f.home,
-        executablePath: upgraded.explicit,
+    }
+    await writeFile(f.receiptPath, JSON.stringify(f.receipt))
+    assert.equal(await f.engine.resolve(), f.executable)
+    await writeFile(
+      path.join(f.directory, 'bin/runtime.dll'),
+      'damaged runtime',
+    )
+    await assert.rejects(f.engine.resolve(), { code: 'checksum_mismatch' })
+    await writeFile(
+      path.join(f.directory, 'bin/runtime.dll'),
+      'complete publish tree',
+    )
+    assert.equal(await f.engine.resolve(), f.executable)
+    if (process.platform !== 'win32') {
+      await chmod(f.executable, 0o644)
+      await assert.rejects(f.engine.resolve(), {
+        code: 'engine_package_mismatch',
       })
-      await service.init()
-      try {
-        const checked = await service.dispatch({
-          operation: 'configure',
-          executablePath: '',
-        })
-        assert.equal(checked.code, 'engine_update_required')
-        assert.equal(service.engine.explicit, '')
-      } finally {
-        await service.stop()
-      }
-    } finally {
-      await f.cleanup()
+      await chmod(f.executable, 0o755)
+      assert.equal(await f.engine.resolve(), f.executable)
     }
-  },
-)
-test(
-  'checksum failure and archive links cannot replace an installed engine',
-  { skip: process.platform === 'win32' },
-  async () => {
-    const f = await fixture()
-    try {
-      await f.engine.install()
-      f.manifest.assets[rid()].sha256 = '0'.repeat(64)
-      await assert.rejects(f.engine.install(), { code: 'checksum_mismatch' })
-      assert.equal((await f.engine.status()).ready, true)
-    } finally {
-      await f.cleanup()
-    }
-    const linked = await fixture(true)
-    try {
-      await assert.rejects(linked.engine.install(), /must not contain links/)
-    } finally {
-      await linked.cleanup()
-    }
-  },
-)
+    await writeFile(
+      path.join(f.directory, 'bin/extra.dll'),
+      'unexpected runtime',
+    )
+    await assert.rejects(f.engine.resolve(), { code: 'checksum_mismatch' })
+  } finally {
+    await f.cleanup()
+  }
+})
+
+test('package upgrades follow exact dependencies while preserving user data', async () => {
+  const f = await fixture()
+  try {
+    await mkdir(f.home, { recursive: true })
+    await writeFile(path.join(f.home, 'sessions.json'), '{"one":"index"}')
+    assert.equal(await f.engine.resolve(), f.executable)
+    await writeFile(
+      path.join(f.directory, 'package.json'),
+      JSON.stringify({ name: '@fixture/engine', version: '1.0.1' }),
+    )
+    await assert.rejects(f.engine.resolve(), {
+      code: 'engine_package_mismatch',
+    })
+    const upgraded = new Engine({
+      home: f.home,
+      packageRoot: f.root,
+      manifest: {
+        ...f.manifest,
+        packages: { [rid()]: { name: '@fixture/engine', version: '1.0.1' } },
+      },
+    })
+    assert.equal(await upgraded.resolve(), f.executable)
+    assert.equal(
+      await readFile(path.join(f.home, 'sessions.json'), 'utf8'),
+      '{"one":"index"}',
+    )
+    await rm(f.directory, { recursive: true })
+    await assert.rejects(upgraded.resolve(), {
+      code: 'engine_package_missing',
+    })
+  } finally {
+    await f.cleanup()
+  }
+})
 
 test(
-  'cancellation while suspending connections cannot activate a replacement engine',
-  { skip: process.platform === 'win32' },
-  async () => {
-    const f = await fixture()
-    try {
-      await f.engine.install()
-      const marker = path.join(f.home, 'engine/current/original')
-      await writeFile(marker, 'keep')
-      const controller = new AbortController()
-      let resumed = false
-      await assert.rejects(
-        f.engine.install({
-          signal: controller.signal,
-          beforeActivate: async () =>
-            controller.abort(new DOMException('Cancelled', 'AbortError')),
-          afterActivate: async () => {
-            resumed = true
-          },
-        }),
-        { name: 'AbortError' },
-      )
-      assert.equal(await readFile(marker, 'utf8'), 'keep')
-      assert.equal(resumed, true)
-    } finally {
-      await f.cleanup()
-    }
-  },
-)
-
-test(
-  'failed suspension resumes the original engine connections',
-  { skip: process.platform === 'win32' },
-  async () => {
-    const f = await fixture()
-    let resumed = false
-    try {
-      await assert.rejects(
-        f.engine.install({
-          beforeActivate: async () => {
-            throw new Error('suspension failed')
-          },
-          afterActivate: async () => {
-            resumed = true
-          },
-        }),
-        /suspension failed/,
-      )
-      assert.equal(resumed, true)
-    } finally {
-      await f.cleanup()
-    }
-  },
-)
-
-test(
-  'relative external engines remain executable from the MCP working directory and persist an absolute path',
+  'relative external executable paths remain absolute and persist in settings',
   { skip: process.platform === 'win32' },
   async () => {
     const f = await fixture()
     const service = new IndexerService({ home: f.home })
     try {
       await service.init()
-      const absolute = path.join(f.home, 'source/bin/eu4indexer')
       await service.dispatch({
         operation: 'configure',
-        executablePath: path.relative(process.cwd(), absolute),
+        executablePath: path.relative(process.cwd(), f.executable),
       })
-      const command = await service.engine.resolve()
-      const run = spawnSync(command, ['manage'], {
-        cwd: f.home,
-        encoding: 'utf8',
-      })
-      assert.equal(run.status, 0, run.error?.message ?? run.stderr)
-      assert.equal(command, absolute)
+      assert.equal(await service.engine.resolve(), f.executable)
       assert.equal(
         JSON.parse(await readFile(path.join(f.home, 'settings.json')))
           .executablePath,
-        absolute,
+        f.executable,
       )
     } finally {
       await service.stop()

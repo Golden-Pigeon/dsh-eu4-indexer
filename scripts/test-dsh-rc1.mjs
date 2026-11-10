@@ -80,10 +80,13 @@ try {
     await npm(npmArgs)
     if (packaged) {
       const pkg = JSON.parse(await readFile(path.join(root, 'package.json')))
-      const archive = path.join(
-        root,
-        'artifacts/npm',
-        npmArchiveName(pkg.name, pkg.version),
+      const archive = path.resolve(
+        process.env.DSH_TEST_PLUGIN_ARCHIVE ??
+          path.join(
+            root,
+            'artifacts/npm',
+            npmArchiveName(pkg.name, pkg.version),
+          ),
       )
       const registry = await localRegistry(root)
       server = registry.server

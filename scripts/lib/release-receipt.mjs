@@ -24,6 +24,11 @@ async function expectedPackages(root) {
     rid,
   }))
   assert.equal(engines.length, 8, 'Expected all eight engine packages')
+  assert.match(
+    lock.engineVersion ?? '',
+    /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/,
+    'Missing or invalid upstream engine version',
+  )
   assert.equal(
     new Set(engines.map((p) => p.name)).size,
     8,
@@ -33,13 +38,13 @@ async function expectedPackages(root) {
     assert.ok(packageName.test(p.name), 'Unexpected engine package name')
     assert.equal(
       p.version,
-      pkg.version,
-      'Engine version must match the main package',
+      lock.engineVersion,
+      'Engine version must match the upstream engine version',
     )
   }
   assert.deepEqual(
     pkg.optionalDependencies,
-    Object.fromEntries(engines.map((p) => [p.name, pkg.version])),
+    Object.fromEntries(engines.map((p) => [p.name, p.version])),
     'Optional dependencies must match the complete release set',
   )
   const result = []

@@ -19,6 +19,7 @@ export class SessionConnections {
   declare closed: boolean
   declare suspended: boolean
   declare disposed: WeakSet<Agent>
+  declare enabled: WeakSet<Agent>
   declare controller: AbortController
   declare gate: SelectionGate
   constructor(
@@ -35,6 +36,7 @@ export class SessionConnections {
     this.suspended = false
     // A resumed or cleared chat reuses its id with a new Agent instance.
     this.disposed = new WeakSet()
+    this.enabled = new WeakSet()
     this.controller = new AbortController()
     this.gate = new SelectionGate()
     service.withSelections = (work, signal) =>
@@ -83,6 +85,66 @@ export class SessionConnections {
       ? AbortSignal.any([signal, this.controller.signal])
       : this.controller.signal
   }
+  toolsEnabled(agent?: Agent) {
+    return (
+      !!agent &&
+      !this.closed &&
+      !this.disposed.has(agent) &&
+      this.ctx.agents.get(agent.id) === agent &&
+      this.enabled.has(agent)
+    )
+  }
+  async setToolsEnabled(agent: Agent, enabled: boolean, signal?: AbortSignal) {
+    return this.gate.run(
+      true,
+      async () => {
+        const id = String(agent.id)
+        if (
+          this.closed ||
+          this.disposed.has(agent) ||
+          this.ctx.agents.get(agent.id) !== agent
+        )
+          throw new Error('This chat is no longer active')
+        this.signal(signal).throwIfAborted()
+        if (enabled) {
+          const wasEnabled = this.toolsEnabled(agent)
+          if (wasEnabled && this.bindings.get(id)?.agent === agent)
+            return { enabled: true, queryConnected: true }
+          this.enabled.add(agent)
+          // Management stays available even if the engine or saved index needs repair.
+          try {
+            await this.queueRebind(id, undefined, signal)
+            this.signal(signal).throwIfAborted()
+            if (
+              this.disposed.has(agent) ||
+              this.ctx.agents.get(agent.id) !== agent
+            )
+              throw new Error('This chat is no longer active')
+            return { enabled: true, queryConnected: this.bindings.has(id) }
+          } catch (error) {
+            if (
+              this.signal(signal).aborted ||
+              this.disposed.has(agent) ||
+              this.ctx.agents.get(agent.id) !== agent
+            ) {
+              if (!wasEnabled) this.enabled.delete(agent)
+              if (this.bindings.get(id)?.agent === agent) await this.release(id)
+              throw error
+            }
+            return {
+              enabled: true,
+              queryConnected: false,
+              queryError: failure(error).error,
+            }
+          }
+        }
+        this.enabled.delete(agent)
+        await this.release(id)
+        return { enabled: false, queryConnected: false }
+      },
+      this.signal(signal),
+    )
+  }
   async currentIndex(agent: Agent, signal?: AbortSignal): Promise<string> {
     const binding = this.bindings.get(String(agent.id))
     if (!binding) return ''
@@ -129,7 +191,7 @@ export class SessionConnections {
       )
     return selected.name
   }
-  async select(agent: Agent, requested?: string | null) {
+  async select(agent: Agent, requested?: string | null, signal?: AbortSignal) {
     if (
       requested === null ||
       (requested === undefined &&
@@ -139,7 +201,7 @@ export class SessionConnections {
     const registry = await this.service.engine.call(
       { operation: 'list' },
       {
-        signal: this.controller.signal,
+        signal: this.signal(signal),
         timeoutMs: this.service.config.timeoutMs ?? 30000,
       },
     )
@@ -158,11 +220,13 @@ export class SessionConnections {
       (registry.databases.length === 1 ? registry.databases[0] : undefined)
     )
   }
-  async attach(agent: Agent, requested?: string | null) {
-    if (this.closed || this.suspended || this.disposed.has(agent)) return
+  async attach(agent: Agent, requested?: string | null, signal?: AbortSignal) {
+    signal = this.signal(signal)
+    signal.throwIfAborted()
+    if (!this.toolsEnabled(agent) || this.suspended) return
     let db
     try {
-      db = await this.select(agent, requested)
+      db = await this.select(agent, requested, signal)
     } catch (error) {
       if (
         ['engine_missing', 'engine_update_required'].includes(
@@ -172,23 +236,36 @@ export class SessionConnections {
         return
       throw error
     }
-    if (!db) return
-    const executable = await this.service.engine.resolve()
+    signal.throwIfAborted()
+    if (!db || !this.toolsEnabled(agent) || this.suspended) return
+    const launch = await this.service.engine.querySession({
+      database: db.path,
+      sessionId: String(agent.id),
+    })
+    signal.throwIfAborted()
+    if (!this.toolsEnabled(agent) || this.suspended) return
     const config: McpClient.StdioConfig = {
       serverName: 'eu4',
       transport: 'stdio',
-      command: executable,
-      args: ['serve', '--db', db.path, '--query-session', String(agent.id)],
-      env: { EU4INDEXER_HOME: this.service.home },
-      cwd: this.service.home,
+      ...launch,
       toolCallTimeoutMs: this.service.config.toolCallTimeoutMs ?? 60000,
       failOnStartupError: true,
       maxInstructionBytes: 32768,
     }
     const handle = agent.ctx.plugin(this.plugin, config)
+    let abort = () => {}
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(signal.reason)
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted) abort()
+    })
     try {
-      await handle.await()
-      if (this.closed || this.suspended || this.disposed.has(agent)) {
+      await Promise.race([
+        Promise.resolve().then(() => handle.await()),
+        cancelled,
+      ])
+      signal.throwIfAborted()
+      if (!this.toolsEnabled(agent) || this.suspended) {
         await handle.dispose()
         return
       }
@@ -196,11 +273,14 @@ export class SessionConnections {
     } catch (error) {
       await handle.dispose()
       throw error
+    } finally {
+      signal.removeEventListener('abort', abort)
     }
   }
   async disposeAgent(agent: Agent) {
     const id = String(agent.id)
     this.disposed.add(agent)
+    this.enabled.delete(agent)
     await this.tails.get(id)?.catch(() => {})
     // A late disposal must not close a replacement Agent's connection.
     await this.gate.run(
@@ -225,20 +305,21 @@ export class SessionConnections {
       this.controller.signal,
     )
   }
-  queueRebind(id: string, name?: string | null) {
+  queueRebind(id: string, name?: string | null, signal?: AbortSignal) {
     const previous = this.tails.get(id) ?? Promise.resolve()
     const next = previous
       .catch(() => {})
       .then(async () => {
         if (this.closed || this.suspended) return
+        signal?.throwIfAborted()
         const agent = this.ctx.agents.get(id as SessionId)
         if (!agent || this.disposed.has(agent)) return
         const old = this.bindings.get(id)?.db
         await this.release(id)
         try {
-          await this.attach(agent, name)
+          await this.attach(agent, name, signal)
         } catch (error) {
-          if (old) await this.attach(agent, old)
+          if (old && !this.signal(signal).aborted) await this.attach(agent, old)
           throw error
         }
       })
@@ -301,5 +382,8 @@ export class SessionConnections {
     await Promise.allSettled(
       [...this.bindings.keys()].map((id) => this.release(id)),
     )
+    // An in-flight unload removes its binding before awaiting client disposal.
+    // Close known clients first to interrupt queries, then drain their coordinator.
+    await this.gate.run(true, () => {})
   }
 }

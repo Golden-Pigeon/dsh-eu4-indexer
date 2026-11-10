@@ -1,5 +1,5 @@
 # @goldenpigeon/dsh-eu4-indexer-engine-darwin-arm64
 
-Platform engine for @goldenpigeon/dsh-eu4-indexer 0.1.0 (osx-arm64). Installed automatically through optionalDependencies. Contains the complete .NET publish output; no .NET SDK is required.
+EU4/HOI4 indexer 0.4.0 for osx-arm64, matching the upstream engine version. Installed and updated automatically through the exact optionalDependencies of @goldenpigeon/dsh-eu4-indexer, which has its own version. The bin/ directory contains the complete, directly runnable .NET publish output; no .NET SDK, postinstall script or separate engine activation is required. The Node library is available from @goldenpigeon/dsh-eu4-indexer/engine.
 
 The wrapper is MIT licensed. Bundled components retain their own licenses; see THIRD-PARTY-NOTICES.md and third-party/.

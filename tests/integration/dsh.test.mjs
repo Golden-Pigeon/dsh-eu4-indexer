@@ -49,9 +49,6 @@ test(
             game,
             'example-game',
           ),
-          configDir:
-            process.env[game.toUpperCase() + '_CONFIG_DIR'] ??
-            path.join(os.homedir(), '.eu4indexer/config', game),
         })
       handles.push(ctx.plugin(SystemPrompt))
       await handles.at(-1).await()
@@ -152,7 +149,7 @@ test(
       for (const skill of skills)
         assert.ok(
           (await ctx.get('skills').get(skill.name)).content.includes(
-            'eu4_indexer_manage',
+            'eu4_indexer_state',
           ),
         )
       const loadSkill = (id, name) =>
@@ -203,8 +200,64 @@ test(
         assert.equal(r.ok, true, JSON.stringify(r))
         return r.value
       }
+      let activationId = 0
+      const admitted = async (agent) => {
+        const toolSet = await ctx.tools.resolve({
+          agent,
+          modelSelection: { provider: 'fixture', model: 'fixture' },
+          signal: new AbortController().signal,
+        })
+        try {
+          return [...toolSet.view(agent).keys()]
+            .filter((name) => /^(eu4_indexer_|mcp__eu4__)/.test(name))
+            .sort()
+        } finally {
+          toolSet.dispose()
+        }
+      }
+      const setTools = async (agent, enabled = true) => {
+        const loader = new ToolExecutionPipeline(ctx)
+        const signal = new AbortController().signal
+        const toolSet = await ctx.tools.resolve({
+          agent,
+          modelSelection: { provider: 'fixture', model: 'fixture' },
+          signal,
+        })
+        try {
+          const prepared = await loader.prepare({
+            callId: `activate-${++activationId}`,
+            name: 'eu4_indexer_tools',
+            arguments: { enabled },
+            agent,
+            signal,
+            toolSet,
+          })
+          const outcome =
+            prepared.kind === 'dispatch'
+              ? await loader.dispatch(prepared.exec)
+              : prepared
+          const result = await loader.complete(prepared.exec, outcome)
+          assert.notEqual(result.isError, true, texts(result))
+        } finally {
+          toolSet.dispose()
+        }
+      }
+      // Owner UI bindings persist without eagerly connecting either chat.
       await owner({ operation: 'bind', sessionId: 'one', name: 'eu4' })
       await owner({ operation: 'bind', sessionId: 'two', name: 'hoi4' })
+      for (const agent of agents.values()) {
+        assert.deepEqual(await admitted(agent), ['eu4_indexer_tools'])
+        assert.ok(!ctx.tools.get('mcp__eu4__read_query', agent))
+      }
+      await setTools(agents.get('one'))
+      assert.equal((await admitted(agents.get('one'))).length, 34)
+      assert.deepEqual(await admitted(agents.get('two')), ['eu4_indexer_tools'])
+      await setTools(agents.get('two'))
+      await setTools(agents.get('one'), false)
+      assert.deepEqual(await admitted(agents.get('one')), ['eu4_indexer_tools'])
+      assert.equal((await admitted(agents.get('two'))).length, 34)
+      assert.equal((await owner({ operation: 'state' })).bindings.one, 'eu4')
+      await setTools(agents.get('one'))
       // rc.1 clear/resume replaces the Agent but preserves its session id.
       const oldAgent = agents.get('one')
       await ctx.parallel('agent/disposed', { agent: oldAgent })
@@ -214,6 +267,8 @@ test(
       resumedAgent.ctx = resumedScope.ctx
       agents.set('one', resumedAgent)
       await ctx.serial('agent/created', { agent: resumedAgent })
+      assert.ok(!ctx.tools.get('mcp__eu4__read_query', resumedAgent))
+      await setTools(resumedAgent)
       await ctx.parallel('agent/disposed', { agent: oldAgent })
       const tool = (agent, name) =>
         ctx
@@ -411,8 +466,10 @@ test(
         ctx
           .get('tools')
           .definitions()
-          .some((tool) => tool.name === 'eu4_indexer_manage'),
+          .some((tool) => tool.name === 'eu4_indexer_state'),
       )
+      assert.deepEqual(await admitted(agents.get('two')), ['eu4_indexer_tools'])
+      await setTools(agents.get('two'))
       assert.ok(tool(agents.get('two'), 'read_query'))
     } finally {
       for (const handle of handles.reverse()) await handle.dispose()

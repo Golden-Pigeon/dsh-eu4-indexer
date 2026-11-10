@@ -10,6 +10,7 @@ import { IndexerService } from './service.js'
 import { SessionConnections } from './integration/sessions.js'
 import { registerSkills } from './integration/skills.js'
 import { failure } from './util.js'
+import { registerManagementTools } from './integration/tools.js'
 export type {
   Api,
   ManagementRequest,
@@ -25,7 +26,7 @@ export const Config = z.object({
     .string()
     .default(path.join(os.homedir(), '.dsh', 'data', 'eu4-indexer'))
     .description(
-      'Directory for managed engines, rules, indexes, tasks and session defaults.',
+      'Directory for registry, indexes, tasks and session defaults. The packaged engine and game rules are installed and updated with the plugin.',
     ),
   executablePath: z
     .string()
@@ -123,69 +124,7 @@ export async function apply(ctx: Context, config: Config) {
       },
     })
   })
-  ctx.tools.register({
-    name: 'eu4_indexer_manage',
-    description:
-      'Manage EU4/HOI4 engine, rules, indexes and background tasks. Use state/list before querying; bind sets the current session default. index/refresh/setup/install_engine return a task id; inspect tasks until terminal. Existing game queries use mcp__eu4__ tools.',
-    parameters: {
-      type: 'object',
-      properties: {
-        operation: {
-          type: 'string',
-          enum: [
-            'state',
-            'capabilities',
-            'status',
-            'detect',
-            'workshop',
-            'playsets',
-            'list',
-            'inspect',
-            'setup',
-            'index',
-            'refresh',
-            'register',
-            'remove',
-            'bind',
-            'unbind',
-            'tasks',
-            'cancel_task',
-            'install_engine',
-          ],
-        },
-        game: { type: 'string', enum: ['eu4', 'hoi4'] },
-        name: { type: 'string' },
-        gameDir: { type: 'string' },
-        configDir: { type: 'string' },
-        mods: { type: 'array', items: { type: 'string' } },
-        workshopIds: { type: 'array', items: { type: 'string' } },
-        playset: { type: 'string' },
-        autoMods: { type: 'boolean' },
-        languages: { type: 'array', items: { type: 'string' } },
-        skipGeneric: { type: 'boolean' },
-        noFts: { type: 'boolean' },
-        path: { type: 'string' },
-        taskId: { type: 'string' },
-        deleteFile: { type: 'boolean' },
-        setActive: { type: 'boolean' },
-        errorOffset: { type: 'integer', minimum: 0 },
-        errorLimit: { type: 'integer', minimum: 1, maximum: 1000 },
-      },
-      required: ['operation'],
-      additionalProperties: false,
-    },
-    output: {
-      schema: {},
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
-    },
-    execute: async (request, execution) => {
-      const result = await service.dispatch(request, {
-        signal: execution.signal,
-        currentSession: execution.agent?.id,
-      })
-      return result
-    },
-  })
+  registerManagementTools(ctx, service, sessions)
   const connect = (agent: ReturnType<Context['agents']['list']>[number]) =>
     sessions
       .rebind(String(agent.id))

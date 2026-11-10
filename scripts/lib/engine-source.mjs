@@ -34,7 +34,12 @@ export async function stageEngineSource(root, upstream) {
   const source = path.join(temp, 'source')
   try {
     await cp(path.join(root, 'global.json'), path.join(temp, 'global.json'))
-    for (const relative of ['', 'external/cwtools']) {
+    for (const relative of [
+      '',
+      'external/cwtools',
+      'external/cwtools-eu4-config',
+      'external/cwtools-hoi4-config',
+    ]) {
       const repo = path.join(upstream, relative)
       const files = execFileSync('git', ['ls-files', '-z'], {
         cwd: repo,

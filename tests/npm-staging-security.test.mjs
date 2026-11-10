@@ -47,7 +47,8 @@ async function fixture(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'dsh-stage-security-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
   const lock = JSON.parse(await readFile(path.join(root, 'engine.lock.json')))
-  for (const p of Object.values(lock.packages)) p.version = '0.2.0'
+  lock.engineVersion = '0.4.0'
+  for (const p of Object.values(lock.packages)) p.version = lock.engineVersion
   const pkg = {
     name: '@goldenpigeon/dsh-eu4-indexer',
     version: '0.2.0',
@@ -119,6 +120,8 @@ async function childResult(args, options) {
 
 test('release receipt binds all nine archives, exact dependency versions and the source commit', async (t) => {
   const f = await fixture(t)
+  assert.equal(f.receipt.packages.at(-1).version, '0.2.0')
+  assert.ok(f.receipt.packages.slice(0, 8).every((p) => p.version === '0.4.0'))
   assert.deepEqual(await readReleaseReceipt(f.directory, commit), f.packages)
   await assert.rejects(
     readReleaseReceipt(f.directory, '2'.repeat(40)),

@@ -44,6 +44,16 @@ Unix builds default to `/tmp`; Windows uses Public Documents. Set
 `DSH_EU4_BUILD_TEMP` for another staging location outside personal home directories.
 This affects development builds only, not the plugin's user-data directory.
 
+## Direct platform npm payloads
+
+The unreleased engine-library refactor ships complete `bin/` trees directly in
+platform npm packages, without internal engine tar/ZIP archives. Neutral source
+staging and embedded-path checks still apply. npm creates the outer tarball;
+local inspection of all nine candidate packages confirmed zero UID/GID, empty
+owner names, no links or filesystem extensions, and no accidental `.secret/` or
+`.npmrc` entries. The previous archive-specific fixes above describe the original
+`0.1.0` format.
+
 ## History and third-party content
 
 Older eu4-indexer `Eu4Indexer.Tests/TestPaths.cs` revisions contained three

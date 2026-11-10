@@ -6,23 +6,18 @@ This guide covers operations after installation. Start with the
 
 ## Engine and rules
 
-Open **Game script indexes** in the plugin configuration page, then install the
-managed engine under **Engine & settings**. Installation verifies, extracts and
-activates the engine offline from the installed platform npm package. It does not
-run installation scripts or compile locally. Downloading CWTools game rules still
-requires a network connection; install the rules you need for EU4 and HOI4
-separately.
+The engine and pinned EU4/HOI4 CWTools rules are installed and updated together
+through the plugin's exact-version platform npm dependency. Tools can index and
+query immediately, including offline, without a separate engine or rule install.
+There are no engine-install or rule-download buttons. Plugin upgrades preserve
+indexes, tasks and chat defaults; refresh an index to apply new bundled rules.
+Old engine/rule caches in the data directory are preserved and ignored.
 
 To use an existing compatible engine, enter its executable path in **Engine &
 settings**. It must support management API 1, and you are responsible for updating
-it. Clear the path to switch back to managed installation.
-
-After a plugin upgrade, the managed engine's source, SDK, platform and package
-version must match the plugin lock. Missing, stale or mismatched installation
-receipts require an update. **Install / update managed engine** restores it from
-the local platform package while preserving indexes. If optional dependencies
-were disabled, reinstall the matching platform package as prompted or configure
-an external engine.
+it. Clear the path to return immediately to the packaged engine. If optional
+dependencies were disabled or package files are missing or damaged, reinstall
+the plugin with optional dependencies enabled, or configure an external engine.
 
 Linux glibc and musl engines are distributed separately; see
 [native dependencies](packaging.md#linux-native-dependencies). When moving to
@@ -49,16 +44,28 @@ selections and indexes being built are protected from removal.
 
 See [upstream dependency coverage](../resources/docs/dependencies.md) for HOI4
 doctrine relationships, modifier templates and script-expression queries. Refresh
-existing HOI4 indexes after installing updated rules to obtain the new derived
+existing HOI4 indexes after updating the plugin to obtain the new derived
 relationships.
 
 ## Chats and skills
 
 Bind a default index to a chat, then ask about game content directly or invoke
-`/eu4` or `/hoi4`. Each loaded chat uses its own official DSH MCP client. Tool
+`/eu4` or `/hoi4`. The model chooses the skill and calls `eu4_indexer_tools`
+with `enabled: true` before using game tools. Only this short loader is present
+in unrelated chats; the 16 management tools and, when connected, 17 query tools
+become available on the next request. Each enabled chat uses its own official
+DSH MCP client. Tool
 names remain `mcp__eu4__…`, and one chat's selection does not affect another.
 Unbinding closes that chat's query connection. The management page can also clear
 saved defaults for closed chats.
+
+The model can unload with `eu4_indexer_tools` and `enabled: false` when returning
+to unrelated work. This removes tools from future requests and closes the
+query connection while retaining background tasks and the saved default.
+Re-enabling restores the default; a temporary MCP selection does not survive
+closure. Restored chats and plugin/host restarts start unloaded. The management
+page remains usable while chat tools are unloaded, and UI bindings alone do not
+start a query client.
 
 A persistent default binding differs from MCP's temporary `select_database`
 selection. Temporary selection lasts only for the current query connection;
@@ -78,14 +85,13 @@ other chats.
 
 ## Background tasks
 
-Engine installation, rule downloads, index creation and refresh return background
-tasks. Tasks support queuing, progress and cancellation; the same index name
+Index creation and refresh return background tasks. Tasks support queuing, progress and cancellation; the same index name
 cannot be changed concurrently. Plugin disposal cancels tasks and waits for child
 process cleanup. Restart marks unfinished tasks as `interrupted` rather than
 repeating builds automatically.
 
-For model-driven management, check `state` / `list`, track the returned task ID
-with `tasks`, and cancel with `cancel_task`. See the
+For model-driven management, enable tools first, then call `eu4_indexer_state` / `eu4_indexer_list`, track the returned task ID
+with `eu4_indexer_tasks`, and cancel with `eu4_indexer_cancel_task`. See the
 [management reference](management.md) for parameters and results.
 
 ## Plugin configuration
@@ -93,14 +99,14 @@ with `tasks`, and cancel with `cancel_task`. See the
 Set these fields in DSH plugin configuration. Preserve existing unrelated fields
 when editing a profile.
 
-| Field               | Default                   | Meaning                                                                                       |
-| ------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
-| `home`              | `~/.dsh/data/eu4-indexer` | Engine, rules, registry, indexes, tasks and chat defaults                                     |
-| `executablePath`    | Empty                     | External engine supporting management API 1; takes precedence over the path saved in the UI   |
-| `language`          | `auto`                    | Legacy compatibility; `zh` / `en` remain accepted but do not fix the skill language           |
-| `concurrency`       | `2`                       | Parallel background tasks, from 1 to 8; changes to the same index are exclusive               |
-| `timeoutMs`         | `30000`                   | Short management-request and download timeout in milliseconds; not used for background builds |
-| `toolCallTimeoutMs` | `60000`                   | MCP query timeout in milliseconds                                                             |
+| Field               | Default                   | Meaning                                                                                     |
+| ------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
+| `home`              | `~/.dsh/data/eu4-indexer` | Registry, indexes, tasks and chat defaults                                                  |
+| `executablePath`    | Empty                     | External engine supporting management API 1; takes precedence over the path saved in the UI |
+| `language`          | `auto`                    | Legacy compatibility; `zh` / `en` remain accepted but do not fix the skill language         |
+| `concurrency`       | `2`                       | Parallel background tasks, from 1 to 8; changes to the same index are exclusive             |
+| `timeoutMs`         | `30000`                   | Short management-request timeout in milliseconds; not used for background builds            |
+| `toolCallTimeoutMs` | `60000`                   | MCP query timeout in milliseconds                                                           |
 
 Use a separate `home` for each independent DSH host. `DSH_HOME` alone does not
 override the plugin data path. Isolated tests also need a separate skill directory

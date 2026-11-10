@@ -30,8 +30,15 @@ does not authorize publication.
 
 Follow [builds and checks](packaging.md#builds-and-checks) to prepare the full
 release set and complete platform, original DSH v0.2.2-rc.1 and real npm
-installation tests. Inspect the nine same-version tarballs in `artifacts/npm/`
+installation tests. Inspect the nine tarballs in `artifacts/npm/`
 and run `npm run verify:release`.
+
+The main plugin has its own version. All eight platform packages use the pinned
+upstream engine release version, referenced exactly by the main package's optional
+dependencies. Publish and pin the upstream release before preparing an updated
+engine set; see [version alignment](packaging.md#builds-and-checks). Release
+receipts and staging validate each package's own version and the complete
+dependency graph, including sets whose plugin and engine versions differ.
 
 In your own terminal, sign in to npm and complete the required 2FA. Publish the
 eight platform packages individually with
@@ -101,8 +108,10 @@ tarball cannot override proxy, TLS or other npm settings through `publishConfig`
 
 ## Subsequent versions: CI stages, maintainer approves
 
-1. Update the main version, run `npm run prepare:engines` to synchronize platform
-   packages and exact dependencies, update locks and the changelog, and test locally.
+1. Update the main version and pin the upstream engine release, then run
+   `npm run prepare:engines` to synchronize platform packages and exact dependencies.
+   Platform versions follow upstream, independently of the main version. Update
+   locks and the changelog, and test locally.
 2. With authorization for the push, land changes on the default branch. In GitHub
    Actions, choose **Run workflow** on `package-tests`, select the default branch,
    set **stage** to `true` and choose `latest`, `next` or `beta`. `latest` rejects
@@ -133,6 +142,24 @@ tarball cannot override proxy, TLS or other npm settings through `publishConfig`
 Triggering GitHub Actions and approving publication on npm are separate actions.
 **Run workflow** requests staging only; the workflow has no direct-publication
 step bypassing maintainer approval.
+
+## GitHub Releases
+
+Create a GitHub Release for each plugin release as well as staging its npm set.
+With authorization, tag the exact default-branch commit that passed the release
+workflow, using the main plugin version, such as `v0.1.1`. The eight platform
+packages may use a different upstream-aligned version, such as `0.4.0`.
+
+Download the successful run's `verified-npm-release` artifact and verify its source
+commit, complete nine-package set and recorded hashes. Attach those same nine
+tarballs and `release-set.json` to the GitHub Release; do not rebuild or repack
+them. Include the changes, the upstream version and the npm status in the release
+notes. A GitHub Release can be available while npm packages still await the
+maintainer's personal approval. Approve all engine packages before the main npm
+package, as described above.
+
+GitHub tagging and release creation remain separate authorized operations; the
+credential-isolated npm staging job does not gain GitHub write permissions.
 
 ## Failure recovery
 

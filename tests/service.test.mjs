@@ -298,54 +298,15 @@ test('a failed engine suspension preserves the saved engine and resumes connecti
   }
 })
 
-test('engine activation excludes management reads while task polling and cancellation remain available', async () => {
+test('removed management operations are rejected', async () => {
   const f = await fixture()
-  const activating = Promise.withResolvers(),
-    release = Promise.withResolvers()
-  let statusCalls = 0,
-    state
-  f.service.engine.status = async () => {
-    statusCalls++
-    return { ready: false }
-  }
-  f.service.engine.install = ({ signal, withActivation = (work) => work() }) =>
-    withActivation(async () => {
-      activating.resolve()
-      await release.promise
-      signal.throwIfAborted()
-    })
   try {
-    const task = await f.service.dispatch({ operation: 'install_engine' })
-    await activating.promise
-    state = f.service.dispatch({ operation: 'state' })
-    await new Promise((resolve) => setImmediate(resolve))
-    assert.equal(
-      statusCalls,
-      0,
-      'Do not probe files while the engine directory is being replaced',
-    )
-    assert.equal(
-      (await f.service.dispatch({ operation: 'tasks' })).find(
-        (r) => r.id === task.id,
-      ).state,
-      'running',
-    )
-    const done = f.service.tasks.running.get(task.id).done
-    assert.equal(
-      (await f.service.dispatch({ operation: 'cancel_task', taskId: task.id }))
-        .state,
-      'cancelling',
-    )
-    release.resolve()
-    await done
-    await state
-    assert.equal(
-      f.service.tasks.list().find((r) => r.id === task.id).state,
-      'cancelled',
-    )
+    for (const operation of ['install_engine', 'setup'])
+      await assert.rejects(
+        f.service.dispatch({ operation }),
+        /Unknown management operation/,
+      )
   } finally {
-    release.resolve()
-    await Promise.allSettled([state])
     await f.stop()
   }
 })
