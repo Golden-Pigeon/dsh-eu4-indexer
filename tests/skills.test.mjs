@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { renderDshSkill } from '../scripts/lib/skill.mjs'
 import { Context } from '@deepseek-ai/cordis'
 import Skills, {
   isModelInvocable,
@@ -8,6 +10,39 @@ import Skills, {
 } from '@deepseek-ai/dsh-skill'
 import { registerSkills } from '../dist/integration/skills.js'
 import { Config } from '../dist/index.js'
+
+test('CRLF upstream skills produce the same DSH instructions as LF for all four translations', async () => {
+  const root = path.resolve(import.meta.dirname, '..')
+  for (const game of ['eu4', 'hoi4'])
+    for (const language of ['en', 'zh']) {
+      const source = (
+        await readFile(
+          path.join(
+            root,
+            'external/eu4-indexer/skills/eu4-indexer',
+            game,
+            language,
+            'SKILL.md',
+          ),
+          'utf8',
+        )
+      ).replaceAll('\r\n', '\n')
+      const expected = await readFile(
+        path.join(root, 'resources/skills', game, language, 'SKILL.md'),
+        'utf8',
+      )
+      const actual = renderDshSkill(
+        source.replaceAll('\n', '\r\n'),
+        game,
+        language,
+      )
+      assert.equal(renderDshSkill(source, game, language), expected)
+      assert.equal(actual, expected)
+      assert.doesNotMatch(actual, /see "Setup" at the end|见文末"设置"|\r/)
+      assert.match(actual, /eu4_indexer_tools/)
+      assert.match(actual, /engine\.ready/)
+    }
+})
 
 async function fixture() {
   const ctx = new Context()

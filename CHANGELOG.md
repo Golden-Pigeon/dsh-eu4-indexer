@@ -4,6 +4,9 @@
 
 ## 0.1.1 — 2026-11-10
 
+- Normalize upstream skill line endings before adapting them, so Windows builds
+  remove obsolete setup instructions and generate the same four skills as Unix.
+
 - Version all eight platform binary packages with upstream engine `0.4.0`,
   independently of plugin `0.1.1`. Pin the upstream release and verify source
   version, exact dependencies, mixed-version release receipts and upgrades.

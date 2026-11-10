@@ -49,6 +49,12 @@ Upstream CI executed its own Windows x64, macOS ARM64 and Linux x64 flows.
 Original `0.1.0` archives and their release receipt retain their original hashes.
 Evidence is in local `artifacts/version-align-*.log` and `artifacts/upstream-040-*`.
 
+The subsequent plugin release CI reproduced a Windows-only skill-generation
+failure: CRLF input prevented replacement of obsolete setup instructions. The
+generator now normalizes upstream line endings first. A regression compares LF
+and CRLF input for all four actual game/language skills and first failed against
+the preceding generator. Evidence is in `artifacts/release-011-crlf-before.log`.
+
 ## On-demand chat tools
 
 The local candidate keeps one unconditional `eu4_indexer_tools` loader. Original
