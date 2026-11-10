@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.2 — 2026-11-11
+
+- Use the upstream CLI's `~/.eu4indexer` directory by default, sharing its index
+  registry and databases. Preserve explicit `home` settings; data in the previous
+  default directory is not moved automatically.
+- Document installation through DSH Desktop's plugin page using the full scoped
+  npm package name.
 - Separate main-branch checks, PR compatibility validation and tag-triggered
   releases. Automatically stage npm updates and publish GitHub release assets
   from the same verified set; remove the temporary release-specific retry workflow.

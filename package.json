@@ -1,6 +1,6 @@
 {
   "name": "@goldenpigeon/dsh-eu4-indexer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Manage and query EU4 and HOI4 game and mod indexes in DeepSeek Harness, with isolated query sessions.",
   "type": "module",
   "license": "MIT",

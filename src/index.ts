@@ -24,7 +24,7 @@ export const inject = ['agents', 'tools', 'skills']
 export const Config = z.object({
   home: z
     .string()
-    .default(path.join(os.homedir(), '.dsh', 'data', 'eu4-indexer'))
+    .default(path.join(os.homedir(), '.eu4indexer'))
     .description(
       'Directory for registry, indexes, tasks and session defaults. The packaged engine and game rules are installed and updated with the plugin.',
     ),

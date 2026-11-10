@@ -101,12 +101,16 @@ when editing a profile.
 
 | Field               | Default                   | Meaning                                                                                     |
 | ------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
-| `home`              | `~/.dsh/data/eu4-indexer` | Registry, indexes, tasks and chat defaults                                                  |
+| `home`              | `~/.eu4indexer`            | Registry, indexes, tasks and chat defaults                                                  |
 | `executablePath`    | Empty                     | External engine supporting management API 1; takes precedence over the path saved in the UI |
 | `language`          | `auto`                    | Legacy compatibility; `zh` / `en` remain accepted but do not fix the skill language         |
 | `concurrency`       | `2`                       | Parallel background tasks, from 1 to 8; changes to the same index are exclusive             |
 | `timeoutMs`         | `30000`                   | Short management-request timeout in milliseconds; not used for background builds            |
 | `toolCallTimeoutMs` | `60000`                   | MCP query timeout in milliseconds                                                           |
+
+The default `home` is shared with the upstream CLI, so both use the same index
+registry and databases. Explicit `home` settings keep their configured paths;
+existing data in `~/.dsh/data/eu4-indexer` is not moved automatically.
 
 Use a separate `home` for each independent DSH host. `DSH_HOME` alone does not
 override the plugin data path. Isolated tests also need a separate skill directory
