@@ -1,12 +1,14 @@
-import { readFile, readdir, lstat } from 'node:fs/promises'
+import { readFile, readdir, lstat, mkdtemp, rm } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
+import os from 'node:os'
 import { platforms } from '../dist/engine/platforms.js'
 import { compiledFiles } from './compile.mjs'
 import { npmArchiveName } from './lib/npm-package.mjs'
 import { npmArchivePaths } from './lib/npm-archive.mjs'
+import { verifyPublishPackage } from '../dist/engine/package.js'
+import { verifyPlatformFiles } from './lib/platform-files.mjs'
 const root = path.resolve(import.meta.dirname, '..')
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json')))
 const lock = JSON.parse(await readFile(path.join(root, 'engine.lock.json')))
@@ -84,7 +86,7 @@ for (const [target, platform] of Object.entries(platforms)) {
   const archive = path.join(
     root,
     'artifacts/npm',
-    npmArchiveName(platform.name, pkg.version),
+    npmArchiveName(platform.name, lock.packages[target].version),
   )
   const entries = archivePaths(archive)
   const json = (file) =>
@@ -96,7 +98,9 @@ for (const [target, platform] of Object.entries(platforms)) {
   const manifest = json('package.json'),
     engine = json('engine.json')
   assert.equal(manifest.name, platform.name)
-  assert.equal(manifest.version, pkg.version)
+  assert.equal(manifest.version, lock.engineVersion)
+  assert.equal(manifest.version, lock.packages[target].version)
+  assert.equal(pkg.optionalDependencies[manifest.name], manifest.version)
   assert.deepEqual(manifest.os, platform.os)
   assert.deepEqual(manifest.cpu, platform.cpu)
   assert.deepEqual(manifest.libc, platform.libc)
@@ -104,16 +108,46 @@ for (const [target, platform] of Object.entries(platforms)) {
   assert.equal(engine.apiVersion, lock.apiVersion)
   assert.equal(engine.sourceCommit, lock.sourceCommit)
   assert.deepEqual(engine.build, lock.build)
-  assert.ok(entries.includes(`package/${engine.asset.file}`))
-  const bytes = execFileSync(
-    'tar',
-    ['-xOf', archive, `package/${engine.asset.file}`],
-    { maxBuffer: 256 * 1024 * 1024 },
+  assert.deepEqual(
+    manifest,
+    JSON.parse(
+      await readFile(
+        path.join(root, 'packages', `engine-${target}`, 'package.json'),
+      ),
+    ),
   )
   assert.equal(
-    createHash('sha256').update(bytes).digest('hex'),
-    engine.asset.sha256,
+    new Set(entries).size,
+    entries.length,
+    'Duplicate engine package members',
   )
+  const detail = execFileSync('tar', ['-tvzf', archive], {
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  })
+  assert.ok(
+    detail
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .every((line) => /^[-d]/.test(line)),
+    'Engine package members must be ordinary files or directories',
+  )
+  const extracted = await mkdtemp(path.join(os.tmpdir(), 'dsh-engine-verify-'))
+  try {
+    execFileSync('tar', ['-xzf', archive, '-C', extracted])
+    const directory = path.join(extracted, 'package')
+    await verifyPublishPackage(directory, lock, target)
+    await verifyPlatformFiles(directory, entries, engine, {
+      'README.md': await readFile(
+        path.join(root, 'packages', `engine-${target}`, 'README.md'),
+      ),
+      LICENSE: await readFile(
+        path.join(root, 'packages', `engine-${target}`, 'LICENSE'),
+      ),
+    })
+  } finally {
+    await rm(extracted, { recursive: true, force: true })
+  }
   assert.ok(entries.includes('package/third-party/cwtools/LICENSE'))
   assert.ok(
     entries.includes(
@@ -134,7 +168,7 @@ for (const [target, platform] of Object.entries(platforms)) {
       )
   assert.equal(
     entries.filter((s) => /engine\.(?:zip|tar\.gz)$/.test(s)).length,
-    1,
+    0,
   )
 }
 console.log(

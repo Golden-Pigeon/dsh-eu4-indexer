@@ -65,22 +65,21 @@ belong upstream; DSH lifecycle and UI changes belong here.
 | `npm run test:dsh-rc1`              | Install original official rc.1 dependencies temporarily and run real integrations                     |
 | `npm run test:dsh-rc1 -- --package` | rc.1 integration against the installed npm main and platform packages                                 |
 | `npm run test:desktop`              | The same integration using the installed desktop application's Node and dependencies                  |
-| `npm run verify:package`            | Real npm/pnpm installation, platform selection, public types and offline recovery                     |
+| `npm run verify:package`            | Real npm/pnpm installation, platform selection, public types and immediate offline use                |
 | `npm run verify:release`            | Consistency of the complete main-plus-eight-platform release set                                      |
 
 ### Engine and rules
 
-Build upstream and prepare both games' CWTools rules:
+Build upstream with both games' bundled CWTools rules:
 
 ```sh
 dotnet build external/eu4-indexer/Eu4Indexer.slnx
-dotnet run --project external/eu4-indexer/Eu4Indexer.Cli -- setup --game eu4
-dotnet run --project external/eu4-indexer/Eu4Indexer.Cli -- setup --game hoi4
 npm run test:integration
 npm run test:dsh-rc1
 ```
 
-Rules default to `~/.eu4indexer/config/{eu4,hoi4}`. Set `EU4_CONFIG_DIR` and
+Rules are copied from pinned submodules into engine build/publish output.
+Set `EU4_CONFIG_DIR` and
 `HOI4_CONFIG_DIR` to use separate directories. Set `DSH_EU4_ENGINE` to select a
 self-contained engine; otherwise integration tests use upstream Debug output.
 Fixtures use synthetic games and do not distribute real game or mod data.
@@ -90,6 +89,12 @@ release uses MCP SDK `2.2.0`. SDK, undici and zod overrides in development
 dependencies provide additional regression coverage; they are not host
 installation requirements. See [builds and checks](docs/packaging.md#builds-and-checks)
 for the artifact-validation sequence.
+
+Set `DSH_TEST_PLUGIN_ARCHIVE` with `--package` to test a candidate main tarball
+from another directory while preserving an existing release set. Platform packages
+still come from `artifacts/npm/`. This mode also verifies the real management tool
+pipeline with an immediately ready engine and both games' rules, independent
+management tools and missing-external-engine errors.
 
 `test:desktop` defaults to `/Applications/DeepSeek Harness.app`; override it with
 `DSH_DESKTOP_APP`. Other platforms can set `DSH_DESKTOP_NODE` and
@@ -121,7 +126,7 @@ for installing the artifacts.
 
 When retesting an unpublished tarball with the same version, use an isolated
 cache and compare the installed browser file with current compiled output. Check
-engine installation, rule downloads, indexing, chat binding, in-use removal
+immediate engine and bundled-rule readiness, indexing, chat binding, in-use removal
 protection and plugin disable/re-enable behavior. Record browser errors and the
 scope tested. Close the test instance and remove its temporary directories when
 finished; leave the daily desktop instance and global pnpm store alone.
@@ -136,8 +141,13 @@ archive-metadata checks.
 
 1. Update `external/eu4-indexer` and required nested submodules. Implement and
    test general functionality upstream, then commit those changes locally.
-2. Set `engine.lock.json`'s `sourceCommit` to that commit. Engine builds and skill
+2. Publish an upstream release, then set `engine.lock.json`'s `sourceCommit`,
+   `sourceTag` and `engineVersion` to that release. Platform package versions
+   match the upstream engine; the plugin has its own version. Engine builds and skill
    generation require a clean upstream worktree matching the lock.
+   Fetch upstream tags with `git -C external/eu4-indexer fetch origin --tags`
+   if the checkout is shallow or predates the release. CI fetches these tags
+   explicitly before source validation.
 3. Run `npm run prepare:engines` to synchronize versions and platform dependencies,
    then `npm run build` to generate skills and reference docs. Rebuild affected
    native engines.

@@ -21,8 +21,12 @@ import { npmArchiveName } from './lib/npm-package.mjs'
 
 const root = path.resolve(import.meta.dirname, '..')
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json')))
+const previous = process.argv
+  .find((arg) => arg.startsWith('--upgrade-from='))
+  ?.split('=')[1]
 const archive = path.resolve(
-  process.argv[2] ?? `artifacts/npm/${npmArchiveName(pkg.name, pkg.version)}`,
+  process.argv.slice(2).find((arg) => !arg.startsWith('--')) ??
+    `artifacts/npm/${npmArchiveName(pkg.name, pkg.version)}`,
 )
 // Exercise argument boundaries with a space in every consumer/cache/store path.
 const temp = await mkdtemp(path.join(os.tmpdir(), 'dsh package-'))
@@ -51,7 +55,7 @@ async function run(command, args, cwd) {
 try {
   const entries = await run('tar', ['-tzf', archive], root)
   assert.doesNotMatch(entries, /(?:archives\/|engine\.(?:tar\.gz|zip)|\.dll\n)/)
-  const local = await localRegistry(root)
+  const local = await localRegistry(root, 0, previous ? [previous] : [])
   server = local.server
   const registry = local.url
   const managers = process.argv.includes('--npm-only')
@@ -87,6 +91,46 @@ try {
             `--registry=${registry}`,
             archive,
           ]
+    const engineHome = path.join(temp, `home-${manager}`)
+    const preserved = {
+      'sessions.json': JSON.stringify({ 'chat-one': 'base' }),
+      'config/eu4/marker.cwt': 'preserved rules',
+      'db/preserved.db': 'preserved index fixture',
+    }
+    if (previous) {
+      await run(
+        manager,
+        [...args.slice(0, -1), `${pkg.name}@${previous}`],
+        consumer,
+      )
+      for (const [file, bytes] of Object.entries(preserved)) {
+        await mkdir(path.dirname(path.join(engineHome, file)), {
+          recursive: true,
+        })
+        await writeFile(path.join(engineHome, file), bytes)
+      }
+      const oldEntry = path.join(
+        consumer,
+        'node_modules',
+        pkg.name,
+        'dist/engine/runtime.js',
+      )
+      await run(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `
+        import assert from 'node:assert/strict';
+        const {Engine} = await import(${JSON.stringify(pathToFileURL(oldEntry).href)});
+        const e = new Engine({home:${JSON.stringify(engineHome)}});
+        assert.equal((await e.install()).ready, true);
+        assert.ok((await e.resolve()).includes('engine'));
+      `,
+        ],
+        consumer,
+      )
+    }
     await run(manager, args, consumer)
     const packageDir = path.join(consumer, 'node_modules', pkg.name)
     const consumerTypes = path.join(consumer, 'consumer.mts')
@@ -106,6 +150,13 @@ browser.__ModuleLoader__.load(hostApi)
     await writeFile(
       consumerTypes,
       `import type { Api, Task, Config } from '${pkg.name}'
+import { Engine } from '${pkg.name}/engine'
+const engine = new Engine({ home: '/data' })
+const registry = engine.call({ operation: 'list' })
+const session = engine.querySession({ database: '/data/base.db', sessionId: 'chat-1' })
+// @ts-expect-error Engine queries must retain their request types.
+void engine.call({ operation: 'list', name: 42 })
+void registry; void session
 declare const api: Api
 const job: Promise<Task> = api({ operation: 'index', name: 'base', game: 'eu4' })
 const config: Config = { home: '/data', concurrency: 2 }
@@ -137,7 +188,11 @@ void job
       }),
     )
     const { Engine } = await import(
-      pathToFileURL(path.join(packageDir, 'dist/engine/runtime.js'))
+      pathToFileURL(
+        createRequire(path.join(consumer, 'package.json')).resolve(
+          `${pkg.name}/engine`,
+        ),
+      )
     )
     const lock = JSON.parse(
       await readFile(path.join(packageDir, 'engine.lock.json')),
@@ -160,55 +215,53 @@ void job
               ),
               'utf8',
             )
-          ).includes('eu4_indexer_manage'),
+          ).includes('eu4_indexer_state'),
         )
     const engine = new Engine({
-      home: path.join(temp, `home-${manager}`),
+      home: engineHome,
       fetchImpl: async () => {
         throw Error('Engine installation must stay offline')
       },
     })
-    assert.equal((await engine.install()).ready, true)
-    assert.equal((await engine.call({ operation: 'list' })).databases.length, 0)
-    const managedReceipt = path.join(engine.home, 'engine/current/receipt.json')
-    const installedReceipt = await readFile(managedReceipt, 'utf8')
-    try {
-      for (const change of [
-        { sourceCommit: 'old' },
-        { apiVersion: 0 },
-        { build: { sdkVersion: 'old' } },
-        { rid: 'wrong-platform' },
-        { package: { ...lock.packages[rid()], version: 'old' } },
-        { sourceCommit: lock.sourceCommit, package: undefined },
-      ]) {
-        await writeFile(
-          managedReceipt,
-          JSON.stringify({ ...JSON.parse(installedReceipt), ...change }),
-        )
-        assert.equal((await engine.status()).code, 'engine_update_required')
-        await assert.rejects(engine.call({ operation: 'list' }), {
-          code: 'engine_update_required',
-        })
-      }
-      await rm(managedReceipt)
-      assert.equal((await engine.status()).code, 'engine_update_required')
-      assert.equal((await engine.install()).ready, true)
-    } finally {
-      await writeFile(managedReceipt, installedReceipt)
+    const status = await engine.status()
+    assert.equal(status.ready, true)
+    assert.equal(status.capabilities.engineVersion, lock.engineVersion)
+    const environment = await engine.call({ operation: 'status' })
+    assert.ok(environment.games.every((game) => game.configReady))
+    if (!previous) {
+      await assert.rejects(access(path.join(engine.home, 'engine/current')), {
+        code: 'ENOENT',
+      })
+    } else {
+      // Upgrades select npm's new dependency without changing or removing legacy user data.
+      await access(path.join(engine.home, 'engine/current'))
+      assert.equal(
+        (
+          await readFile(path.join(packageDir, 'package.json'), 'utf8')
+        ).includes(`"version": "${pkg.version}"`),
+        true,
+      )
+      for (const [file, bytes] of Object.entries(preserved))
+        assert.equal(await readFile(path.join(engineHome, file), 'utf8'), bytes)
     }
-    await access(
-      path.join(engine.home, 'engine/current/bin/third-party/cwtools/LICENSE'),
-    )
-    await access(
-      path.join(
-        engine.home,
-        'engine/current/bin/third-party/dotnet-runtime/THIRD-PARTY-NOTICES.TXT',
-      ),
-    )
+    assert.equal((await engine.call({ operation: 'list' })).databases.length, 0)
     const dependencyRoot = path.dirname(
       createRequire(
         path.join(await realpath(packageDir), 'package.json'),
       ).resolve(`${lock.packages[rid()].name}/package.json`),
+    )
+    assert.equal(
+      JSON.parse(await readFile(path.join(dependencyRoot, 'package.json')))
+        .version,
+      lock.engineVersion,
+    )
+    assert.ok((await engine.resolve()).startsWith(dependencyRoot + path.sep))
+    await access(path.join(dependencyRoot, 'bin/third-party/cwtools/LICENSE'))
+    await access(
+      path.join(
+        dependencyRoot,
+        'bin/third-party/dotnet-runtime/THIRD-PARTY-NOTICES.TXT',
+      ),
     )
     const receiptPath = path.join(dependencyRoot, 'engine.json')
     const receipt = await readFile(receiptPath, 'utf8')
@@ -221,7 +274,7 @@ void job
         }),
       )
       await assert.rejects(
-        new Engine({ home: path.join(temp, `stale-${manager}`) }).install(),
+        new Engine({ home: path.join(temp, `stale-${manager}`) }).resolve(),
         { code: 'engine_package_mismatch' },
       )
     } finally {
@@ -231,11 +284,11 @@ void job
     try {
       assert.equal(
         (await engine.status()).ready,
-        true,
-        'A matching managed engine remains usable offline without the optional package',
+        false,
+        'The npm dependency remains authoritative; no stale copied engine is used',
       )
       await assert.rejects(
-        new Engine({ home: path.join(temp, `missing-${manager}`) }).install(),
+        new Engine({ home: path.join(temp, `missing-${manager}`) }).resolve(),
         { code: 'engine_package_missing' },
       )
     } finally {
@@ -258,28 +311,17 @@ void job
       assert.equal(
         (await service.dispatch({ operation: 'configure', executablePath: '' }))
           .ready,
-        false,
+        true,
       )
       assert.equal(service.engine.explicit, '')
-      const task = await service.dispatch({ operation: 'install_engine' })
-      while (
-        ['queued', 'running', 'cancelling'].includes(
-          service.tasks.list().find((r) => r.id === task.id).state,
-        )
-      )
-        await new Promise((r) => setTimeout(r, 20))
-      assert.equal(
-        service.tasks.list().find((r) => r.id === task.id).state,
-        'succeeded',
-      )
     } finally {
       await service.stop()
     }
     console.log(
-      `${manager}: only ${rid()} installed; offline activation, notices and external-to-managed recovery passed.`,
+      `${manager}: only ${rid()} installed; immediate offline use, dependency verification and external-to-packaged switching passed${previous ? `, including upgrade from ${previous}` : ''}.`,
     )
   }
-  const requested = local.requested
+  const requested = local.requested.filter((target) => target !== 'main')
   assert.ok(requested.length)
   assert.ok(
     requested.every((target) => target === rid()),

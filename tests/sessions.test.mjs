@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { SessionConnections } from '../dist/integration/sessions.js'
 import { IndexerService } from '../dist/service.js'
-function fixture() {
+function fixture({ enabled = true } = {}) {
   const clients = [],
     agents = new Map(),
     service = {
@@ -18,6 +18,12 @@ function fixture() {
           ],
         }),
         resolve: async () => '/engine',
+        querySession: async ({ database, sessionId }) => ({
+          command: '/engine',
+          args: ['serve', '--db', database, '--query-session', sessionId],
+          env: { EU4INDEXER_HOME: '/tmp' },
+          cwd: '/tmp',
+        }),
       },
     }
   for (const id of ['one', 'two'])
@@ -64,13 +70,9 @@ function fixture() {
       }),
     },
   }
-  return {
-    ctx,
-    clients,
-    service,
-    agents,
-    sessions: new SessionConnections(ctx, service, {}),
-  }
+  const sessions = new SessionConnections(ctx, service, {})
+  if (enabled) for (const agent of agents.values()) sessions.enabled.add(agent)
+  return { ctx, clients, service, agents, sessions }
 }
 test('same public MCP namespace is scoped independently to each agent', async () => {
   const f = fixture()
@@ -191,6 +193,7 @@ test('a replacement Agent with the same session id reconnects and ignores stale 
     await f.sessions.disposeAgent(old)
     const replacement = { ...old }
     f.agents.set('one', replacement)
+    await f.sessions.setToolsEnabled(replacement, true)
     await f.sessions.rebind('one')
     assert.equal(f.sessions.bindings.get('one').agent, replacement)
     assert.equal(f.sessions.bindings.get('one').db, 'b')
@@ -392,6 +395,309 @@ test('failed suspension waits for every client cleanup before allowing recovery'
   } finally {
     release.resolve()
     await Promise.allSettled([suspending])
+    await f.sessions.stop()
+  }
+})
+
+test('tool activation is lazy, chat-local, idempotent and unloadable', async () => {
+  const f = fixture({ enabled: false })
+  try {
+    await f.sessions.refresh()
+    assert.equal(f.clients.length, 0)
+    const one = f.agents.get('one'),
+      two = f.agents.get('two')
+    assert.equal(f.sessions.toolsEnabled(one), false)
+    await f.sessions.setToolsEnabled(one, true)
+    assert.equal(f.sessions.toolsEnabled(one), true)
+    assert.equal(f.sessions.toolsEnabled(two), false)
+    assert.equal(f.clients.length, 1)
+    one.selected = 'b'
+    await f.sessions.setToolsEnabled(one, true)
+    assert.equal(f.clients.length, 1)
+    assert.equal(await f.sessions.currentIndex(one), 'b')
+    await f.sessions.setToolsEnabled(two, true)
+    await f.sessions.setToolsEnabled(one, false)
+    assert.equal(f.sessions.toolsEnabled(one), false)
+    assert.equal(f.sessions.toolsEnabled(two), true)
+    assert.equal(f.sessions.bindings.has('one'), false)
+    assert.equal(f.sessions.bindings.has('two'), true)
+    await f.sessions.refresh()
+    assert.equal(f.sessions.bindings.has('one'), false)
+  } finally {
+    await f.sessions.stop()
+  }
+})
+test('activation failures leave management available for repair and reject stale agent objects', async () => {
+  const f = fixture({ enabled: false })
+  const one = f.agents.get('one')
+  try {
+    f.service.engine.call = async () => {
+      throw Error('Broken configured engine')
+    }
+    const state = await f.sessions.setToolsEnabled(one, true)
+    assert.equal(state.enabled, true)
+    assert.equal(state.queryConnected, false)
+    assert.match(state.queryError, /Broken configured engine/)
+    const replacement = { ...one }
+    f.agents.set('one', replacement)
+    assert.equal(f.sessions.toolsEnabled(one), false)
+    assert.equal(f.sessions.toolsEnabled(replacement), false)
+    await assert.rejects(
+      f.sessions.setToolsEnabled(one, true),
+      /no longer active/,
+    )
+  } finally {
+    await f.sessions.stop()
+  }
+})
+
+test('cancelled activation waits for late client cleanup and restores unloaded state', async () => {
+  const f = fixture({ enabled: false })
+  const one = f.agents.get('one')
+  const started = Promise.withResolvers(),
+    release = Promise.withResolvers()
+  const controller = new AbortController()
+  let disposed = false
+  one.ctx.plugin = () => ({
+    await: async () => {
+      started.resolve()
+      await release.promise
+    },
+    dispose: async () => {
+      disposed = true
+    },
+  })
+  let loading
+  try {
+    loading = f.sessions.setToolsEnabled(one, true, controller.signal)
+    await started.promise
+    controller.abort()
+    release.resolve()
+    await assert.rejects(loading, { name: 'AbortError' })
+    assert.equal(disposed, true)
+    assert.equal(f.sessions.toolsEnabled(one), false)
+    assert.equal(f.sessions.bindings.has('one'), false)
+  } finally {
+    release.resolve()
+    await Promise.allSettled([loading])
+    await f.sessions.stop()
+  }
+})
+
+test('unloading waits for live queries without clearing the saved default', async () => {
+  const f = fixture({ enabled: false })
+  const one = f.agents.get('one')
+  f.service.bindings.one = 'b'
+  const started = Promise.withResolvers(),
+    release = Promise.withResolvers()
+  let query, unloading
+  try {
+    await f.sessions.setToolsEnabled(one, true)
+    query = f.sessions.gate.run(false, async () => {
+      started.resolve()
+      await release.promise
+    })
+    await started.promise
+    unloading = f.sessions.setToolsEnabled(one, false)
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(f.clients[0].disposed, false)
+    release.resolve()
+    await Promise.all([query, unloading])
+    assert.equal(f.clients[0].disposed, true)
+    assert.equal(f.service.bindings.one, 'b')
+    await f.sessions.setToolsEnabled(one, true)
+    assert.equal(f.sessions.bindings.get('one').db, 'b')
+  } finally {
+    release.resolve()
+    await Promise.allSettled([query, unloading])
+    await f.sessions.stop()
+  }
+})
+
+test('cancelling activation aborts its registry request before releasing the coordinator', async () => {
+  const f = fixture({ enabled: false })
+  const started = Promise.withResolvers(),
+    release = Promise.withResolvers()
+  const controller = new AbortController()
+  let signal,
+    cleaned = false,
+    loading
+  f.service.engine.call = async (_request, options) => {
+    signal = options.signal
+    started.resolve()
+    const aborted = new Promise((_, reject) =>
+      signal.addEventListener('abort', () => reject(signal.reason), {
+        once: true,
+      }),
+    )
+    try {
+      await Promise.race([release.promise, aborted])
+      signal.throwIfAborted()
+      return { activeDb: '', databases: [] }
+    } finally {
+      cleaned = true
+    }
+  }
+  try {
+    loading = f.sessions.setToolsEnabled(
+      f.agents.get('one'),
+      true,
+      controller.signal,
+    )
+    loading.catch(() => {})
+    await started.promise
+    controller.abort()
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(
+      signal.aborted,
+      true,
+      'The caller must cancel the active engine request',
+    )
+    await assert.rejects(loading, { name: 'AbortError' })
+    assert.equal(cleaned, true)
+    assert.equal(f.sessions.toolsEnabled(f.agents.get('one')), false)
+    await f.sessions.gate.run(false, () => {})
+  } finally {
+    release.resolve()
+    await Promise.allSettled([loading])
+    await f.sessions.stop()
+  }
+})
+
+test('cancelling MCP activation disposes the starting client without waiting for readiness', async () => {
+  const f = fixture({ enabled: false })
+  const started = Promise.withResolvers(),
+    release = Promise.withResolvers()
+  const controller = new AbortController()
+  let disposed = false,
+    loading
+  f.agents.get('one').ctx.plugin = () => ({
+    await: async () => {
+      started.resolve()
+      await release.promise
+    },
+    dispose: async () => {
+      disposed = true
+      release.resolve()
+    },
+  })
+  try {
+    loading = f.sessions.setToolsEnabled(
+      f.agents.get('one'),
+      true,
+      controller.signal,
+    )
+    loading.catch(() => {})
+    await started.promise
+    controller.abort()
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(
+      disposed,
+      true,
+      'Cancellation must close a client which is still starting',
+    )
+    await assert.rejects(loading, { name: 'AbortError' })
+    assert.equal(f.sessions.bindings.has('one'), false)
+    assert.equal(f.sessions.toolsEnabled(f.agents.get('one')), false)
+  } finally {
+    release.resolve()
+    await Promise.allSettled([loading])
+    await f.sessions.stop()
+  }
+})
+
+test('cancelling a queued unload preserves activation, selection and the other chat', async () => {
+  const f = fixture({ enabled: false })
+  const release = Promise.withResolvers(),
+    started = Promise.withResolvers()
+  const controller = new AbortController()
+  const one = f.agents.get('one'),
+    two = f.agents.get('two')
+  let query, unloading
+  try {
+    await f.sessions.setToolsEnabled(one, true)
+    await f.sessions.setToolsEnabled(two, true)
+    one.selected = 'b'
+    query = f.sessions.gate.run(false, async () => {
+      started.resolve()
+      await release.promise
+    })
+    await started.promise
+    unloading = f.sessions.setToolsEnabled(one, false, controller.signal)
+    controller.abort()
+    await assert.rejects(unloading, { name: 'AbortError' })
+    assert.equal(f.sessions.toolsEnabled(one), true)
+    assert.equal(f.sessions.toolsEnabled(two), true)
+    assert.ok(f.clients.every((client) => !client.disposed))
+    assert.equal(await f.sessions.currentIndex(one), 'b')
+  } finally {
+    release.resolve()
+    await Promise.allSettled([query, unloading])
+    await f.sessions.stop()
+  }
+})
+
+test('plugin shutdown awaits an unload which has already removed its connection binding', async () => {
+  const f = fixture({ enabled: false })
+  const closing = Promise.withResolvers(),
+    release = Promise.withResolvers()
+  let unloading,
+    stopping,
+    stopped = false
+  try {
+    const agent = f.agents.get('one')
+    await f.sessions.setToolsEnabled(agent, true)
+    f.sessions.bindings.get('one').handle.dispose = async () => {
+      closing.resolve()
+      await release.promise
+    }
+    unloading = f.sessions.setToolsEnabled(agent, false)
+    await closing.promise
+    assert.equal(f.sessions.bindings.has('one'), false)
+    stopping = f.sessions.stop().then(() => {
+      stopped = true
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(
+      stopped,
+      false,
+      'Shutdown must await cleanup owned by the active unload',
+    )
+    release.resolve()
+    await Promise.all([unloading, stopping])
+    assert.equal(stopped, true)
+  } finally {
+    release.resolve()
+    await Promise.allSettled([unloading, stopping])
+    await f.sessions.stop()
+  }
+})
+
+test('shutdown closes clients before draining active query work', async () => {
+  const f = fixture({ enabled: false })
+  const started = Promise.withResolvers(),
+    closed = Promise.withResolvers()
+  let query,
+    cleaned = false
+  try {
+    await f.sessions.setToolsEnabled(f.agents.get('one'), true)
+    f.sessions.bindings.get('one').handle.dispose = async () => closed.resolve()
+    query = f.sessions.gate.run(false, async () => {
+      started.resolve()
+      await closed.promise
+      await new Promise((resolve) => setImmediate(resolve))
+      cleaned = true
+    })
+    await started.promise
+    await f.sessions.stop()
+    assert.equal(
+      cleaned,
+      true,
+      'Shutdown must interrupt the client and await query cleanup',
+    )
+  } finally {
+    closed.resolve()
+    await query
     await f.sessions.stop()
   }
 })

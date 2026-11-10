@@ -1,6 +1,6 @@
 {
   "name": "@goldenpigeon/dsh-eu4-indexer-engine-linux-x64",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Self-contained EU4/HOI4 indexer engine for linux-x64.",
   "license": "MIT",
   "author": "Golden-Pigeon",
@@ -24,8 +24,7 @@
   },
   "files": [
     "engine.json",
-    "engine.tar.gz",
-    "engine.zip",
+    "bin",
     "LICENSE",
     "README.md",
     "THIRD-PARTY-NOTICES.md",

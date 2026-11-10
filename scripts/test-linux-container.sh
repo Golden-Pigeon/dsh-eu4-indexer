@@ -14,14 +14,10 @@ if ! npm ci --ignore-scripts --omit=optional --cache /tmp/npm-cache; then
 fi
 npm install --global pnpm@11.21.0 --ignore-scripts --cache /tmp/npm-cache
 RID=$(node --input-type=module -e "import {rid} from './dist/engine/platforms.js'; console.log(rid())")
-ARCHIVE=$(node --input-type=module -e "import {platforms,rid} from './dist/engine/platforms.js'; import {npmArchiveName} from './scripts/lib/npm-package.mjs'; import fs from 'node:fs'; console.log(npmArchiveName(platforms[rid()].name,JSON.parse(fs.readFileSync('package.json')).version))")
+ARCHIVE=$(node --input-type=module -e "import {rid} from './dist/engine/platforms.js'; import {npmArchiveName} from './scripts/lib/npm-package.mjs'; import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('engine.lock.json')).packages[rid()]; console.log(npmArchiveName(p.name,p.version))")
 mkdir -p /tmp/dsh-engine/package
 tar -xzf "artifacts/npm/$ARCHIVE" -C /tmp/dsh-engine
-mkdir -p /tmp/dsh-executable
-tar -xzf /tmp/dsh-engine/package/engine.tar.gz -C /tmp/dsh-executable
-export DSH_EU4_ENGINE=/tmp/dsh-executable/bin/eu4indexer
-export EU4_CONFIG_DIR=/tmp/dsh-test/rules/eu4
-export HOI4_CONFIG_DIR=/tmp/dsh-test/rules/hoi4
+export DSH_EU4_ENGINE=/tmp/dsh-engine/package/bin/eu4indexer
 # The exported test source has no Git history. Skills were generated and
 # checked in the native job; never bypass provenance checks to repack here.
 npm run typecheck

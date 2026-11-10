@@ -1,69 +1,73 @@
 # Management Reference
 
-The model uses `eu4_indexer_manage` to manage engines, rules, indexes and the
-current chat's binding. The UI calls the same service over authenticated DSH RPC.
-All operations below use the `operation` field.
+Only `eu4_indexer_tools` is present in an unrelated chat. Call it with
+`{ "enabled": true }` to make the 16 independent management tools available
+on the next model request and connect query tools if an index is available.
+Each management tool takes only the parameters listed below; no `operation`
+wrapper is needed. The UI calls the same service over authenticated DSH RPC
+and does not require model-tool activation.
 
 This page describes the plugin interface. For the engine's JSONL protocol and
 reusable query-session interface, see the
 [upstream management protocol](../resources/docs/management.md). Connection and
 concurrency details are in [architecture](architecture.md).
 
-## Operations
+## Loading and unloading
 
-| Operation                          | Parameters and result                                                                                                                          |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state`                            | Engine state, registry, environment, tasks, bindings and chat list                                                                             |
-| `tasks`                            | Recorded tasks                                                                                                                                 |
-| `capabilities` / `status` / `list` | Upstream capabilities, environment or registry                                                                                                 |
-| `detect`                           | `game`; optional `gameDir`, `mods[]`, `workshopIds[]`, `playset`, `autoMods`; preview the resolved source order                                |
-| `workshop` / `playsets`            | `game`; installed Workshop items or launcher playsets                                                                                          |
-| `index`                            | `name`, `game`, discovery parameters, `configDir`, `languages[]`, `skipGeneric`, `noFts`; returns a task                                       |
-| `refresh`                          | `name`, `game`; rebuild from the database's saved original inputs; returns a task                                                              |
-| `setup`                            | `game`; download rules; returns a task                                                                                                         |
-| `register`                         | `name`, `path`; optional `setActive`; validate and import an existing database                                                                 |
-| `inspect`                          | `name` or `path`; optional `errorOffset`, `errorLimit` (1–1000); paginated parse errors with `hasMoreErrors`                                   |
-| `remove`                           | `name`; optional `deleteFile`; rejects in-use indexes and indexes being built                                                                  |
-| `bind` / `unbind`                  | The UI provides `sessionId`; model calls use the current chat ID. `bind` also requires `name`                                                  |
-| `cancel_task`                      | `taskId`; request cancellation and return task state                                                                                           |
-| `install_engine`                   | Install and verify the pinned local platform engine, then reconnect; returns a task                                                            |
-| `configure`                        | UI only: `executablePath`; nonempty paths are probed first. Clearing the path is allowed when the managed engine is missing or needs an update |
+`eu4_indexer_tools` takes one required boolean, `enabled`. Loading returns
+`enabled` and `queryConnected`; a connection failure may also include `queryError`.
+Management remains enabled if the engine or saved index needs repair. No index
+means management is available without query tools; build or bind an index to
+connect. Repeating a successful load preserves the live temporary selection.
+
+Call with `{ "enabled": false }` to remove management and query tools from
+future requests in this chat. It waits for active queries to finish, closes the
+MCP client, and retains saved defaults and background tasks. The loader stays
+available. Tool visibility follows the live Agent instance; restored chats and
+plugin/host restarts require another load. Other chats are unaffected.
+
+## Tools
+
+All names have the `eu4_indexer_` prefix. `game` defaults to `eu4`.
+
+| Tool                       | Parameters and result                                                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `eu4_indexer_state`        | Engine readiness, registry, environment, tasks, bindings and chat list                                                  |
+| `eu4_indexer_capabilities` | Engine/schema/API versions, games and supported operations                                                              |
+| `eu4_indexer_status`       | Game environments and bundled or overridden rule paths                                                                  |
+| `eu4_indexer_list`         | Registered indexes and the registry default                                                                             |
+| `eu4_indexer_detect`       | Optional `game`, `gameDir`, `mods[]`, `workshopIds[]`, `playset`, `autoMods`; preview resolved source order             |
+| `eu4_indexer_workshop`     | Optional `game`; installed Workshop items                                                                               |
+| `eu4_indexer_playsets`     | Optional `game`; launcher playsets and ordered mods                                                                     |
+| `eu4_indexer_inspect`      | `name` or `path`; optional `errorOffset`, `errorLimit` (1–1000); paginated parse errors                                 |
+| `eu4_indexer_index`        | `name`; optional game/discovery fields, `configDir`, `languages[]`, `skipGeneric`, `noFts`, `setActive`; returns a task |
+| `eu4_indexer_refresh`      | `name`; optional `game`; rebuild from saved inputs; returns a task                                                      |
+| `eu4_indexer_register`     | `name`, `path`; optional `setActive`; validate and import a compatible database                                         |
+| `eu4_indexer_remove`       | `name`; optional `deleteFile`; rejects in-use indexes and ongoing builds                                                |
+| `eu4_indexer_bind`         | `name`; bind the current chat to an index                                                                               |
+| `eu4_indexer_unbind`       | Clear the current chat's binding and close its query connection                                                         |
+| `eu4_indexer_tasks`        | Recorded tasks, progress, results and errors                                                                            |
+| `eu4_indexer_cancel_task`  | `taskId`; request cancellation and return task state                                                                    |
+
+The engine and both games' rules are installed and updated with the plugin.
+The old `eu4_indexer_manage`, `install_engine` and `setup` interfaces are removed.
+`configure` remains UI-only: `executablePath` selects a probed compatible external
+engine; clearing it returns to the packaged dependency.
 
 ## Examples
 
-List available indexes, then bind the current chat:
+After loading with `eu4_indexer_tools`, call `eu4_indexer_list` with `{}`, then `eu4_indexer_bind` with
+`{ "name": "vanilla" }`. Model tools always use the current chat ID and do not
+accept `sessionId`. The management UI can select a chat explicitly.
+
+To build an index, call `eu4_indexer_index` with:
 
 ```json
-{ "operation": "list" }
+{ "game": "eu4", "name": "vanilla", "gameDir": "/games/EU4" }
 ```
 
-```json
-{ "operation": "bind", "name": "vanilla" }
-```
-
-Model calls do not need `sessionId` and cannot use it to change other chats. The
-management UI specifies the chat ID explicitly.
-
-Background operations return a task. Poll for its terminal state:
-
-```json
-{
-  "operation": "index",
-  "game": "eu4",
-  "name": "vanilla",
-  "gameDir": "/games/EU4"
-}
-```
-
-```json
-{ "operation": "tasks" }
-```
-
-To cancel, use the task's returned `id`:
-
-```json
-{ "operation": "cancel_task", "taskId": "<returned-task-id>" }
-```
+Poll `eu4_indexer_tasks` with `{}` until the task is terminal. To cancel, call
+`eu4_indexer_cancel_task` with `{ "taskId": "<returned-task-id>" }`.
 
 Task states are `queued`, `running`, `cancelling`, `succeeded`, `failed`,
 `cancelled` or `interrupted`. Successful output is in `result`; failures have
@@ -88,6 +92,6 @@ database directory.
 
 The production UI sends Connection RPC envelopes through a separate Connection
 Fetch route at `/api/eu4-indexer/dispatch`, using DSH authentication and owner
-access checks. It does not claim the Gateway's `/api` interceptor. The JSON
-examples above are tool arguments, not complete HTTP RPC envelopes. The plugin
+access checks. It does not claim the Gateway's `/api` interceptor. Tool examples above show model-facing calls; the UI uses operation-based RPC
+envelopes internally. The plugin
 does not start a separate public management service.

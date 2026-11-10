@@ -1,12 +1,13 @@
 {
   "name": "@goldenpigeon/dsh-eu4-indexer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Manage and query EU4 and HOI4 game and mod indexes in DeepSeek Harness, with isolated query sessions.",
   "type": "module",
   "license": "MIT",
   "author": "Golden-Pigeon",
   "exports": {
     ".": "./dist/index.js",
+    "./engine": "./dist/engine/index.js",
     "./client": "./dist/client/client.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -96,14 +97,14 @@
     "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer.git"
   },
   "optionalDependencies": {
-    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-x64": "0.1.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-arm64": "0.1.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-win32-x64": "0.1.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64": "0.1.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-x64": "0.1.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-arm64": "0.1.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-x64": "0.1.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-arm64": "0.1.0"
+    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-x64": "0.4.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-arm64": "0.4.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-win32-x64": "0.4.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64": "0.4.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-x64": "0.4.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-arm64": "0.4.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-x64": "0.4.0",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-arm64": "0.4.0"
   },
   "overrides": {
     "@modelcontextprotocol/client": "2.3.0",

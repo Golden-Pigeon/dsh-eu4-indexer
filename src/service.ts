@@ -7,7 +7,7 @@ import type {
 } from './contracts.js'
 import path from 'node:path'
 import { mkdir } from 'node:fs/promises'
-import { Engine } from './engine/runtime.js'
+import { Engine } from './engine/index.js'
 import { SelectionGate } from './integration/selection-gate.js'
 import { Tasks } from './indexing/tasks.js'
 import {
@@ -22,10 +22,8 @@ import {
 
 const mutations = new Set([
   'configure',
-  'install_engine',
   'index',
   'refresh',
-  'setup',
   'bind',
   'unbind',
   'register',
@@ -178,7 +176,7 @@ export class IndexerService {
     return {
       engine,
       registry,
-      environment,
+      ...(environment === undefined ? {} : { environment }),
       tasks: this.tasks.list(),
       bindings: { ...this.bindings },
       sessions,
@@ -197,7 +195,7 @@ export class IndexerService {
     ) as unknown as ManagementRequest
     const operation = string(request.operation, 'operation')
     const perform = () => this.perform(request, { ...options, signal })
-    // Journal polling and cancellation remain available during activation.
+    // Journal polling and cancellation remain available during engine configuration.
     const work = ['tasks', 'cancel_task'].includes(operation)
       ? perform()
       : this.management.run(mutations.has(operation), perform, signal)
@@ -238,9 +236,13 @@ export class IndexerService {
       if (
         !checked.ready &&
         (request.executablePath ||
-          !['engine_missing', 'engine_update_required'].includes(
-            checked.code ?? '',
-          ))
+          ![
+            'engine_missing',
+            'engine_update_required',
+            'engine_package_missing',
+            'engine_package_mismatch',
+            'checksum_mismatch',
+          ].includes(checked.code ?? ''))
       )
         throw new UserError(checked.error ?? 'Engine is not ready')
       try {
@@ -266,64 +268,17 @@ export class IndexerService {
       )
     if (operation === 'unbind')
       return this.bind(currentSession ?? request.sessionId, null, signal)
-    if (operation === 'install_engine') {
-      if (
-        this.tasks
-          .list()
-          .some((task) =>
-            ['queued', 'running', 'cancelling'].includes(task.state),
-          )
-      )
-        throw new UserError(
-          'Wait for background tasks before installing an engine',
-          'busy',
-        )
-      return this.tasks.start(
-        'install_engine',
-        'engine',
-        {},
-        (cancel, onEvent) =>
-          this.engine.install({
-            signal: cancel,
-            onEvent,
-            beforeActivate: () => this.onEngineChanging?.(cancel),
-            afterActivate: () => this.onEngineChanged?.(),
-            withActivation: (work) => this.management.run(true, work, cancel),
-          }),
-      )
-    }
-    if (['index', 'refresh', 'setup'].includes(operation)) {
-      if (
-        this.tasks
-          .list()
-          .some(
-            (task) =>
-              task.kind === 'install_engine' &&
-              ['queued', 'running', 'cancelling'].includes(task.state),
-          )
-      )
-        throw new UserError('Wait for the engine installation', 'busy')
+    if (['index', 'refresh'].includes(operation)) {
       const game = string(request.game, 'game', 'eu4')
       if (!['eu4', 'hoi4'].includes(game))
         throw new UserError('Unsupported game')
-      if (
-        this.tasks
-          .list()
-          .some(
-            (task) =>
-              ['queued', 'running', 'cancelling'].includes(task.state) &&
-              (operation === 'setup' || task.kind === 'setup'),
-          )
-      )
-        throw new UserError(
-          'Finish rule updates and index builds before changing rules or starting another build',
-          'busy',
-        )
-      if (operation !== 'setup') indexName(request.name)
-      const key =
-        operation === 'setup' ? `rules:${game}` : `index:${request.name}`
-      return this.tasks.start(operation, key, request, (cancel, onEvent) =>
-        this.engine.call(request, { signal: cancel, onEvent }),
+      indexName(request.name)
+      return this.tasks.start(
+        operation,
+        `index:${request.name}`,
+        request,
+        (cancel, onEvent) =>
+          this.engine.call(request, { signal: cancel, onEvent }),
       )
     }
     if (operation === 'remove') {

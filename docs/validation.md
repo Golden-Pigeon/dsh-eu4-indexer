@@ -5,6 +5,192 @@ fixes and test counts remain in the [review history](reviews/2026-11-08.md).
 Reproduction evidence is local to `artifacts/` and is not shipped in npm packages.
 See [test commands](../CONTRIBUTING.md#tests) to reproduce the checks.
 
+## Upstream-aligned engine versions
+
+Upstream [v0.4.0](https://github.com/Golden-Pigeon/eu4-indexer/releases/tag/v0.4.0)
+is published from `b71fa0cfe3e004b3c359768360064aff1f2ee4fc` after
+[PR #12](https://github.com/Golden-Pigeon/eu4-indexer/pull/12) and the merged main
+branch passed Linux, macOS and Windows CI. All six release archives contain the
+complete self-contained engine, pinned rules, skills and license notices.
+GitHub's server-computed SHA-256 digests match all six verified local archives.
+The Windows smoke test also now closes its Python SQLite connections explicitly.
+
+The local plugin remains `0.1.1`; all eight platform npm packages use the upstream
+version `0.4.0`. The engine lock pins that release tag and commit. Build checks
+compare its version with upstream `AppInfo.fs`; dependency generation, archive
+verification, release receipts and staging handle the two versions independently.
+CI fetches upstream tags explicitly so shallow checkouts can verify provenance.
+These results were recorded before the plugin push and npm staging. See the
+[GitHub release](https://github.com/Golden-Pigeon/dsh-eu4-indexer/releases/tag/v0.1.1)
+for the release source, verified artifacts and npm approval status.
+
+Validation for this version alignment:
+
+- All 117 local checks passed without skips, including strict TypeScript, mixed
+  plugin/engine release receipts, historical dependency resolution and the real
+  npm 11.21.2 staging endpoint against a loopback fixture. No real npm credential
+  or staging endpoint was used.
+- All eight platform engines were rebuilt from neutral tracked-source staging;
+  their complete publish trees, licenses and the nine-package release set passed
+  verification. Engine capabilities report `0.4.0` after installation.
+- Original DSH v0.2.2-rc.1 passed all six installed-package integrations. The
+  installed desktop runtime passed five source integrations, with the package-only
+  case skipped. Its daily profile and UI were untouched. Isolated rc.1 Web loaded
+  the exact packed client with both games' rules ready and zero browser errors.
+- Real npm and pnpm fresh installations and upgrades from `0.1.0` passed on macOS
+  ARM64, Debian 12 glibc x64 and Alpine musl x64. Each downloaded only its matching
+  binary and retained existing data. Both Linux containers also passed type
+  checks, 116 portable regressions with the optional staging fixture skipped,
+  real-engine integrations and all six original rc.1 packaged integrations.
+
+The npm payloads for Windows, macOS x64 and Linux ARM64 were cross-built and
+inspected; they were not executed natively in this local plugin validation.
+Upstream CI executed its own Windows x64, macOS ARM64 and Linux x64 flows.
+Original `0.1.0` archives and their release receipt retain their original hashes.
+Evidence is in local `artifacts/version-align-*.log` and `artifacts/upstream-040-*`.
+
+## On-demand chat tools
+
+The local candidate keeps one unconditional `eu4_indexer_tools` loader. Original
+rc.1 per-step tool resolution admits the 16 management tools only after that
+Agent enables them. MCP clients start on demand; restored Agent objects, even
+with a reused chat ID, start unloaded. Unloading retains jobs and saved defaults.
+
+Validation for this change:
+
+- Strict TypeScript and local regressions: 110 passed, one optional npm-staging
+  fixture skipped. Coverage includes cancellation after late MCP startup,
+  query draining, idempotent loading, stale Agents and all four skill bodies.
+- Original rc.1 installed-package integration: four passed. Resolved model tool
+  sets contain only the loader before activation, 34 plugin tools after loading
+  a usable index, and only the loader after unloading. A hidden management call
+  is rejected by the real execution pipeline. Owner UI bindings work while
+  inactive, and other chats retain their own tools and connections.
+- The installed Desktop's bundled runtime passed three source integrations,
+  with the package-only case skipped. No daily profile or window was changed.
+- Isolated original rc.1 Web loaded the exact packed client with an immediately
+  ready engine, both rule sets and zero script errors.
+- Real npm/pnpm fresh installs and upgrades from 0.1.0 selected only the host
+  binary and preserved data. Debian 12 glibc x64 and Alpine musl x64 passed
+  type checks, 110 portable tests, real-engine integrations, all four original
+  rc.1 packaged integrations and npm/pnpm installation checks.
+
+The tool-set tests resolve actual per-step schemas rather than reading the
+unfiltered registration catalog. Natural-language activation/unloading choices
+in live model conversations have not been measured. Evidence is in local
+`artifacts/ondemand-*.log` and the Web result/screenshot. The existing eight
+platform engine packages are reused; this change only updates the plugin.
+
+### Follow-up review
+
+The follow-up reproduced and fixed two lifecycle regressions introduced by
+on-demand activation:
+
+- Cancelling a load did not reach its registry request or MCP startup. Both could
+  retain the exclusive coordinator until their normal timeout. Activation now
+  propagates cancellation, closes a starting client and awaits transport cleanup.
+- Shutdown could return during an unload after the binding had been removed but
+  before client disposal completed. Shutdown now closes known clients first,
+  then drains the coordinator, including the pending unload and query cleanup.
+
+Regressions first failed against the preceding implementation and passed after
+the fixes. The full suite now passes 115 tests, with one optional npm-staging
+fixture skipped. Added checks cover queued-unload cancellation, retained temporary
+selection, registry cancellation, startup cancellation and shutdown ordering.
+Original rc.1 installed-package integration passes all six tests, including
+owned MCP children which never finish initialization; cancellation and shutdown
+both confirm actual child exit. The Desktop's bundled runtime passes five tests,
+with the package-only test skipped, without touching its daily profile. Isolated
+rc.1 Web reports zero script errors. Real npm/pnpm fresh installations and
+0.1.0 upgrades pass on macOS ARM64. Debian 12 glibc x64 and Alpine musl x64
+also pass strict type checks, 115 portable regressions, real-engine tests, all
+six original rc.1 packaged integrations and npm/pnpm installation checks.
+Subsequent source review found no new issues.
+
+Evidence is in `artifacts/ondemand-review-*.log`, including the failing-before-fix
+logs and exact packed Web validation. Original 0.1.0 archives and the release
+receipt retain their original hashes. Nothing was pushed, staged or published.
+
+## Bundled rules and independent tools
+
+The local candidate now bundles EU4 rules at `a85622d3` and HOI4 rules at
+`297dd69c` through nested upstream submodules. Both complete rule trees and
+licenses are included in every platform package and its file-hash receipt.
+The bundled-rules change is now included in upstream `v0.4.0`; see the release
+and version-alignment validation above.
+The upstream `setup` command/API and plugin `install_engine`/`setup` operations
+are removed. Sixteen independent management tools replace the wrapper tool;
+the 17 MCP query tools and chat isolation remain available.
+
+Validation for this change:
+
+- Upstream: 121 tests passed, including bundled-file coverage and rule-origin
+  handling. JSONL smoke builds both games without rule downloads, rewrites old
+  bundle paths to simulate an upgrade, and refreshes successfully.
+- Plugin: 106 tests passed, with one optional npm-staging fixture skipped. Strict
+  type checks, tool parameter/session isolation, removed-operation errors,
+  UI behavior and all four generated skills passed.
+- Original DSH v0.2.2-rc.1: all four packaged integrations passed, including builds
+  and refreshes through the independent management tools using npm-installed
+  rules. The installed desktop runtime passed three source integrations with
+  the package-only case skipped; its daily profile was untouched.
+- Isolated original rc.1 Web: exact packed browser code, immediately ready engine
+  and both games' rules, no install/download buttons, and zero script errors.
+- Real npm/pnpm upgrades from 0.1.0 selected only the host platform, exposed both
+  games' rules offline, and preserved user data and ignored legacy engine files.
+- Debian 12 glibc x64 and Alpine musl x64: type checks, unit tests, real-engine
+  integrations, all four original rc.1 packaged integrations and actual npm/pnpm
+  installations passed. The temporary lab containers and input directory were
+  removed afterward.
+- Eight platform publish trees rebuilt and the complete nine-package release set
+  verified. Original 0.1.0 archives and receipt retain their original hashes.
+
+Evidence is in local `artifacts/bundled-rules-*.log` and the Web result/screenshot.
+
+## Unreleased engine-library refactor
+
+The local `0.1.1` candidate uses the public TypeScript `/engine` entry and complete
+platform npm publish trees. It has not been pushed, staged or published. Original
+`0.1.0` tarballs and their release receipt remain unchanged.
+
+This refactor passed:
+
+- Strict TypeScript checks and the local regression suite, including complete-file
+  verification, mismatched provenance, missing dependencies, cancellation,
+  external-engine switching and independent management tools.
+- Real npm and pnpm installs with lifecycle scripts disabled: only the host
+  platform binary was downloaded, and management worked without an engine-install operation.
+  Both package managers also upgraded the original `0.1.0` release to the new
+  candidate, selected the dependency's new engine and preserved existing data
+  and the ignored legacy engine directory. Reproduce with
+  `node scripts/verify-package.mjs --upgrade-from=0.1.0` when both releases' local
+  tarballs are available.
+- All four real-engine integrations against original rc.1 dependencies, including
+  the real management tool pipeline, valid JSON on missing-engine errors,
+  immediate packaged-engine use, EU4/HOI4 queries and independent chat selections.
+  The installed Desktop's bundled runtime also passed the source integrations;
+  its daily profile and UI were not modified or restarted.
+- Original rc.1 Web installation into isolated directories, with the exact packed
+  client bytes, an immediately ready engine, no `home/engine/current` copy and
+  zero browser script errors. No engine-install button was clicked.
+- Debian 12 glibc x64 and Alpine musl x64 containers on lab: type checks, unit
+  regressions, real-engine integrations, all four original rc.1 packaged
+  integrations, and npm/pnpm platform selection and immediate offline use.
+- All eight native publish-tree builds and the complete nine-package release
+  validator, including source/SDK provenance, full file inventories, extra-file
+  refusal and complete third-party notices. Outer npm archive metadata was also
+  inspected for private ownership, links and accidental local credential files.
+
+macOS ARM64 and both Linux x64 variants were executed for this refactor. Windows,
+macOS x64 and Linux ARM64 payloads were cross-built and inspected; this round did
+not execute them natively. Existing CI keeps native runners for those platforms.
+The earlier results below refer to their original code snapshots, not additional
+execution of the new refactor.
+
+Evidence: local `artifacts/engine-library-*.log`, the isolated Web screenshot and
+`artifacts/engine-library-web-result.json`. Test containers and their remote
+scratch directory are removed after collecting logs.
+
 ## DSH v0.2.2-rc.1
 
 The baseline is the official `dsh-v0.2.2-rc.1` tag
@@ -30,6 +216,19 @@ Natural-language skill selection in live multi-turn model conversations has not
 been measured. Automated integration covers all four translations, concurrent
 loading and session isolation. UI reload tests do not use the daily desktop
 instance; see [isolation instructions](../CONTRIBUTING.md#isolated-web-validation).
+
+The installed Desktop's actual `Resources/runtime/cli/bin/dsh` also passed
+package-name installation from the public npm registry in isolated `desktop`
+profiles. A profile retaining the unpublished `dsh-eu4-indexer@0.1.0` dependency
+reproduced the unscoped 404 while adding the scoped name. Removing that dependency
+through the CLI cleared its bundle selection; adding the scoped package then
+succeeded, as did installation into a clean profile. Only the matching macOS ARM64
+engine was installed, and offline activation and management queries passed.
+The same migration against the original archives through a loopback registry
+also preserved an existing data marker and `cordis.patch.yml`. These checks
+disabled peer auto-installation and lifecycle scripts and did not change or boot
+the daily Desktop profile. Evidence: `artifacts/scoped-install-diagnosis/`.
+See [migration instructions](installation.md#migrating-a-local-unscoped-installation).
 
 ## Platform coverage
 

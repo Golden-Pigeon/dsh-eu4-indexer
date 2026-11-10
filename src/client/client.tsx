@@ -43,7 +43,7 @@
       name: '索引名称',
       game: '游戏',
       gameDir: '游戏安装目录（留空自动检测）',
-      configDir: '规则目录（留空使用托管规则）',
+      configDir: '规则目录（留空使用随包规则）',
       mods: '手动模组路径，每行一个，按加载顺序排列',
       workshop: 'Workshop 模组',
       playset: '启动器模组集',
@@ -56,7 +56,7 @@
       noFts: '禁用全文检索',
       advanced: '高级选项',
       noIndexes:
-        '还没有索引。先下载规则，再选择游戏与模组创建索引；也可以导入已有数据库。',
+        '还没有索引。选择游戏与模组，使用随包规则创建索引；也可以导入已有数据库。',
       noTasks: '暂无后台任务',
       noSessions: '暂无已加载会话。在 DSH 中打开聊天后即可绑定。',
       chooseSession: '请选择会话',
@@ -71,9 +71,7 @@
       importAction: '注册数据库',
       cancel: '取消',
       close: '关闭',
-      install: '安装 / 更新托管引擎',
-      setup: '下载 / 更新规则',
-      external: '外部引擎路径（留空使用托管引擎）',
+      external: '外部引擎路径（留空使用随包引擎）',
       save: '检查并保存',
       running: '进行中',
       queued: '排队中',
@@ -90,10 +88,10 @@
       available: '可用规则',
       clear: '清除',
       default: '自动 / 当前默认',
-      rulesHint: '规则只需下载一次；游戏或模组更新后刷新索引即可。',
+      rulesHint: '规则随引擎提供并随插件更新；游戏或模组更新后刷新索引即可。',
       retained: '重建会创建并验证新数据库，完成后切换；失败或取消保留原索引。',
       engineHint:
-        '托管引擎随插件构建或从锁定的发布产物安装。外部引擎必须支持管理 API 1。',
+        '引擎和游戏规则随插件自动安装和更新。外部引擎必须支持管理 API 1。',
       loading: '正在读取…',
       taskId: '任务',
       sourceCount: '来源',
@@ -138,7 +136,7 @@
       name: 'Index name',
       game: 'Game',
       gameDir: 'Game directory (blank: auto-detect)',
-      configDir: 'Rules directory (blank: managed rules)',
+      configDir: 'Rules directory (blank: bundled rules)',
       mods: 'Manual mod paths, one per line, in load order',
       workshop: 'Workshop mods',
       playset: 'Launcher playset',
@@ -151,7 +149,7 @@
       noFts: 'Disable full-text search',
       advanced: 'Advanced options',
       noIndexes:
-        'No indexes yet. Download rules and choose a game and mods to build an index, or import an existing database.',
+        'No indexes yet. Choose a game and mods to build an index using bundled rules, or import an existing database.',
       noTasks: 'No background tasks',
       noSessions: 'No loaded sessions. Open a DSH chat to bind an index.',
       chooseSession: 'Choose a session',
@@ -166,9 +164,7 @@
       importAction: 'Register database',
       cancel: 'Cancel',
       close: 'Close',
-      install: 'Install / update managed engine',
-      setup: 'Download / update rules',
-      external: 'External engine path (blank: managed engine)',
+      external: 'External engine path (blank: packaged engine)',
       save: 'Check and save',
       running: 'Running',
       queued: 'Queued',
@@ -186,11 +182,11 @@
       clear: 'Clear',
       default: 'Auto / current default',
       rulesHint:
-        'Download rules once. Refresh indexes after a game or mod update.',
+        'Rules are bundled with the engine and updated with the plugin. Refresh indexes after a game or mod update.',
       retained:
         'A rebuild validates a new database before switching. Failure or cancellation retains the previous index.',
       engineHint:
-        'The managed engine is bundled at build time or installed from a pinned release artifact. External engines must support management API 1.',
+        'The engine and game rules are installed and updated with the plugin. External engines must support management API 1.',
       loading: 'Loading…',
       taskId: 'Task',
       sourceCount: 'sources',
@@ -650,11 +646,6 @@
                 {field('gameDir', 'gameDir')}
                 {field('configDir', 'configDir')}
                 <div className="buttons">
-                  {button(t('setup'), () =>
-                    act({ operation: 'setup', game: form.game }, () =>
-                      setTab('tasks'),
-                    ),
-                  )}
                   {button(t('load'), async () => {
                     setBusy(true)
                     setError('')
@@ -838,12 +829,6 @@
                 <p className="hint">{t('engineHint')}</p>
                 <p className="mono">{`${t('enginePath')}: ${state?.engine.executable ?? state?.engine.error ?? ''}`}</p>
                 <p className="mono">{`${t('home')}: ${state?.home ?? ''}`}</p>
-                {button(
-                  t('install'),
-                  () =>
-                    act({ operation: 'install_engine' }, () => setTab('tasks')),
-                  'primary',
-                )}
                 <label>
                   {t('external')}
                   <input
@@ -864,11 +849,6 @@
                     <span>
                       {g.game.toUpperCase()} {g.configReady ? '✓' : '—'}
                     </span>
-                    {button(t('setup'), () =>
-                      act({ operation: 'setup', game: g.game }, () =>
-                        setTab('tasks'),
-                      ),
-                    )}
                   </div>
                 ))}
               </div>

@@ -1,13 +1,12 @@
 import { spawnSync } from 'node:child_process'
-import { mkdir, readFile, writeFile, rm, cp } from 'node:fs/promises'
-import { createHash } from 'node:crypto'
+import { mkdir, readFile, rm, chmod } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { rid, platforms } from '../dist/engine/platforms.js'
 import { collectLicenses } from './lib/licenses.mjs'
 import { verifyUpstreamSource } from './lib/upstream-source.mjs'
 import { stageEngineSource, verifyEnginePrivacy } from './lib/engine-source.mjs'
-import { archiveEngine } from './lib/engine-archive.mjs'
+import { prepareEnginePackage } from './lib/engine-package.mjs'
 const args = process.argv.slice(2)
 const targets = args.includes('--all')
   ? Object.keys(platforms)
@@ -60,57 +59,11 @@ try {
     if (build.error) throw build.error
     if (build.status !== 0)
       throw new Error(`dotnet publish failed: ${build.signal ?? build.status}`)
+    if (!target.startsWith('win-'))
+      await chmod(path.join(out, 'bin/eu4indexer'), 0o755)
     await verifyEnginePrivacy(path.join(out, 'bin'), [root, os.homedir()])
     await collectLicenses(root, staged.source, target, path.join(out, 'bin'))
-    const packageDir = path.join(root, 'packages', `engine-${target}`)
-    const metadata = JSON.parse(
-      await readFile(path.join(packageDir, 'package.json')),
-    )
-    if (metadata.version !== lock.packages[target].version)
-      throw new Error('Engine package version does not match the lock')
-    await rm(path.join(packageDir, 'third-party'), {
-      recursive: true,
-      force: true,
-    })
-    await cp(
-      path.join(out, 'bin/third-party'),
-      path.join(packageDir, 'third-party'),
-      { recursive: true, force: true },
-    )
-    await cp(
-      path.join(out, 'bin/THIRD-PARTY-NOTICES.md'),
-      path.join(packageDir, 'THIRD-PARTY-NOTICES.md'),
-    )
-    const artifact = path.join(
-      packageDir,
-      `engine${target.startsWith('win') ? '.zip' : '.tar.gz'}`,
-    )
-    await rm(artifact, { force: true })
-    const pack = archiveEngine(out, artifact, target.startsWith('win'))
-    if (pack.error) throw pack.error
-    if (pack.status !== 0)
-      throw new Error(`Engine archive failed: ${pack.signal ?? pack.status}`)
-    const sha256 = createHash('sha256')
-      .update(await readFile(artifact))
-      .digest('hex')
-    const asset = {
-      file: path.basename(artifact),
-      sha256,
-    }
-    await writeFile(
-      path.join(packageDir, 'engine.json'),
-      JSON.stringify(
-        {
-          apiVersion: lock.apiVersion,
-          sourceCommit: lock.sourceCommit,
-          build: lock.build,
-          rid: target,
-          asset,
-        },
-        null,
-        2,
-      ) + '\n',
-    )
+    await prepareEnginePackage(root, target)
   }
 } finally {
   await staged.cleanup()

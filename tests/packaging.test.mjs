@@ -103,7 +103,12 @@ test('engine staging copies tracked sources without local files or Git metadata 
       path.join(temp, 'global.json'),
       '{"sdk":{"version":"9.0.315"}}\n',
     )
-    for (const relative of ['', 'external/cwtools']) {
+    for (const relative of [
+      '',
+      'external/cwtools',
+      'external/cwtools-eu4-config',
+      'external/cwtools-hoi4-config',
+    ]) {
       const repo = path.join(upstream, relative)
       await mkdir(repo, { recursive: true })
       execFileSync('git', ['init', '-q', repo])
@@ -115,7 +120,12 @@ test('engine staging copies tracked sources without local files or Git metadata 
       )
     }
     staged = await stageEngineSource(temp, upstream)
-    for (const relative of ['', 'external/cwtools']) {
+    for (const relative of [
+      '',
+      'external/cwtools',
+      'external/cwtools-eu4-config',
+      'external/cwtools-hoi4-config',
+    ]) {
       assert.equal(
         await readFile(
           path.join(staged.source, relative, 'tracked.fs'),
@@ -229,7 +239,7 @@ for (const interrupted of ['build', 'typecheck'])
     }
   })
 
-test('an interrupted engine archive cannot produce a success receipt', async () => {
+test('an interrupted engine publish cannot produce a success receipt', async () => {
   const root = path.resolve(import.meta.dirname, '..')
   const temp = await mkdtemp(path.join(os.tmpdir(), 'dsh-archive-signal-'))
   try {
@@ -243,9 +253,9 @@ test('an interrupted engine archive cannot produce a success receipt', async () 
       path.join(root, 'scripts/build-engine.mjs'),
       path.join(temp, 'scripts/build-engine.mjs'),
     )
-    await cp(
-      path.join(root, 'scripts/lib/engine-archive.mjs'),
-      path.join(temp, 'scripts/lib/engine-archive.mjs'),
+    await writeFile(
+      path.join(temp, 'scripts/lib/engine-package.mjs'),
+      "export async function prepareEnginePackage() { throw new Error('Partial publish must not be packaged') }\n",
     )
     await writeFile(path.join(temp, 'package.json'), '{"type":"module"}\n')
     await writeFile(
@@ -292,9 +302,8 @@ test('an interrupted engine archive cannot produce a success receipt', async () 
       import { syncBuiltinESMExports } from 'node:module'
       import { writeFileSync } from 'node:fs'
       childProcess.spawnSync = (command, args) => {
-        if (command === 'dotnet') return { status: 0, stdout: '9.0.315' }
-        if (command !== 'tar') throw new Error('Unexpected subprocess: ' + command)
-        writeFileSync(args[1], 'partial archive')
+        if (command !== 'dotnet') throw new Error('Unexpected subprocess: ' + command)
+        if (args[0] === '--version') return { status: 0, stdout: '9.0.315' }
         return { status: null, signal: 'SIGTERM' }
       }
       syncBuiltinESMExports()
@@ -311,7 +320,7 @@ test('an interrupted engine archive cannot produce a success receipt', async () 
       { cwd: temp, encoding: 'utf8' },
     )
     assert.notEqual(result.status, 0, 'Partial archives must fail the build')
-    assert.match(result.stderr, /Engine archive failed: SIGTERM/)
+    assert.match(result.stderr, /dotnet publish failed: SIGTERM/)
     await assert.rejects(
       readFile(path.join(temp, 'packages/engine-linux-x64/engine.json')),
       { code: 'ENOENT' },
@@ -443,6 +452,7 @@ test('release verification rejects a tarball and local dist that are both stale 
       'scripts/verify-release.mjs',
       'scripts/lib/npm-package.mjs',
       'scripts/lib/npm-archive.mjs',
+      'scripts/lib/platform-files.mjs',
       ...manifest.files,
     ])) {
       await mkdir(path.dirname(path.join(temp, entry)), { recursive: true })
@@ -492,7 +502,12 @@ test('packaging refuses changed upstream skills/docs or an unpinned checkout', a
   try {
     git(['init', '--quiet'])
     await writeFile(path.join(upstream, 'SKILL.md'), 'Pinned instructions\n')
-    git(['add', 'SKILL.md'])
+    await mkdir(path.join(upstream, 'Eu4Indexer.Core'))
+    await writeFile(
+      path.join(upstream, 'Eu4Indexer.Core/AppInfo.fs'),
+      'module AppInfo\nlet Version = "0.4.0"\n',
+    )
+    git(['add', '.'])
     git([
       '-c',
       'user.name=Packaging Test',
@@ -505,8 +520,25 @@ test('packaging refuses changed upstream skills/docs or an unpinned checkout', a
       '-m',
       'fixture',
     ])
-    const lock = { sourceCommit: git(['rev-parse', 'HEAD']) }
+    git(['tag', 'v0.4.0'])
+    const lock = {
+      sourceCommit: git(['rev-parse', 'HEAD']),
+      engineVersion: '0.4.0',
+      sourceTag: 'v0.4.0',
+    }
     verifyUpstreamSource(root, lock)
+    assert.throws(
+      () => verifyUpstreamSource(root, { ...lock, engineVersion: '0.1.1' }),
+      /engineVersion/,
+    )
+    assert.throws(
+      () => verifyUpstreamSource(root, { ...lock, engineVersion: undefined }),
+      /engineVersion/,
+    )
+    assert.throws(
+      () => verifyUpstreamSource(root, { ...lock, sourceTag: 'v0.3.2' }),
+      /sourceTag/,
+    )
     assert.throws(
       () => verifyUpstreamSource(root, { sourceCommit: '0'.repeat(40) }),
       /sourceCommit/,

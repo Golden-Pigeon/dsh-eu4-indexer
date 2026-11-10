@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { platforms } from '../dist/engine/platforms.js'
+import { verifyPublishPackage } from '../dist/engine/package.js'
 const root = path.resolve(import.meta.dirname, '..')
 export async function verifyEnginePackage(target) {
   if (!platforms[target]) throw new Error(`Unknown engine target: ${target}`)
@@ -20,12 +20,7 @@ export async function verifyEnginePackage(target) {
     pkg.version !== lock.packages[target].version
   )
     throw new Error(`Stale engine package ${target}; rebuild it`)
-  const expected = target.startsWith('win') ? 'engine.zip' : 'engine.tar.gz'
-  if (receipt.asset.file !== expected)
-    throw new Error('Unexpected engine archive name')
-  const bytes = await readFile(path.join(dir, receipt.asset.file))
-  if (createHash('sha256').update(bytes).digest('hex') !== receipt.asset.sha256)
-    throw new Error(`Corrupted engine archive ${target}`)
+  await verifyPublishPackage(dir, lock, target)
   await readFile(path.join(dir, 'third-party/cwtools/LICENSE'))
   await readFile(
     path.join(dir, 'third-party/dotnet-runtime/THIRD-PARTY-NOTICES.TXT'),

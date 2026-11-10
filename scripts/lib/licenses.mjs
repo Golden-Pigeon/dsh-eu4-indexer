@@ -162,6 +162,19 @@ export async function collectLicenses(root, upstream, target, bin) {
       ),
     ],
   })
+  for (const game of ['eu4', 'hoi4']) {
+    const name = `cwtools-${game}-config`
+    inventory.push({
+      component: name,
+      license: 'MIT',
+      files: [
+        await copy(
+          path.join(upstream, 'external', name, 'LICENSE'),
+          `${name}/LICENSE`,
+        ),
+      ],
+    })
+  }
   inventory.push({
     component: 'eu4-indexer',
     files: [await copy(path.join(upstream, 'LICENSE'), 'eu4-indexer/LICENSE')],

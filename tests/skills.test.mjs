@@ -56,7 +56,19 @@ test('model catalog offers all four translations while keeping generic user entr
       for (const skill of [zh, en]) {
         assert.ok(skill.content.includes(`${game}-zh`))
         assert.ok(skill.content.includes(`${game}-en`))
-        assert.ok(skill.content.includes('eu4_indexer_manage'))
+        assert.ok(skill.content.includes('eu4_indexer_state'))
+        assert.ok(skill.content.includes('eu4_indexer_tools'))
+        assert.ok(skill.content.includes('enabled: true'))
+        assert.ok(skill.content.includes('enabled: false'))
+        assert.ok(!skill.content.includes('install_engine'))
+        assert.ok(!skill.content.includes('eu4_indexer_manage'))
+        assert.ok(!skill.content.includes('see "Setup" at the end'))
+        assert.ok(!skill.content.includes('见文末"设置"'))
+        assert.ok(skill.content.includes('engine.ready'))
+        assert.ok(
+          skill.content.includes('optionalDependencies') ||
+            skill.content.includes('optional dependencies'),
+        )
       }
       const entry = await f.ctx.get('skills').get(game)
       assert.equal(entry.invocation.modelInvocable, false)

@@ -1,9 +1,12 @@
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises'
 import path from 'node:path'
 import { platforms } from '../dist/engine/platforms.js'
+import { verifyUpstreamSource } from './lib/upstream-source.mjs'
 const root = path.resolve(import.meta.dirname, '..')
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json')))
 const lock = JSON.parse(await readFile(path.join(root, 'engine.lock.json')))
+verifyUpstreamSource(root, lock)
+const engineVersion = lock.engineVersion
 lock.packages = {}
 delete lock.assets
 delete lock.releaseRepository
@@ -13,7 +16,7 @@ for (const [rid, platform] of Object.entries(platforms)) {
   await mkdir(dir, { recursive: true })
   const manifest = {
     name: platform.name,
-    version: pkg.version,
+    version: engineVersion,
     description: `Self-contained EU4/HOI4 indexer engine for ${rid}.`,
     license: 'MIT',
     author: pkg.author,
@@ -23,8 +26,7 @@ for (const [rid, platform] of Object.entries(platforms)) {
     scripts: { prepack: `node ../../scripts/verify-engine-package.mjs ${rid}` },
     files: [
       'engine.json',
-      'engine.tar.gz',
-      'engine.zip',
+      'bin',
       'LICENSE',
       'README.md',
       'THIRD-PARTY-NOTICES.md',
@@ -39,10 +41,10 @@ for (const [rid, platform] of Object.entries(platforms)) {
   await copyFile(path.join(root, 'LICENSE'), path.join(dir, 'LICENSE'))
   await writeFile(
     path.join(dir, 'README.md'),
-    `# ${platform.name}\n\nPlatform engine for ${pkg.name} ${pkg.version} (${rid}). Installed automatically through optionalDependencies. Contains the complete .NET publish output; no .NET SDK is required.\n\nThe wrapper is MIT licensed. Bundled components retain their own licenses; see THIRD-PARTY-NOTICES.md and third-party/.\n`,
+    `# ${platform.name}\n\nEU4/HOI4 indexer ${engineVersion} for ${rid}, matching the upstream engine version. Installed and updated automatically through the exact optionalDependencies of ${pkg.name}, which has its own version. The bin/ directory contains the complete, directly runnable .NET publish output; no .NET SDK, postinstall script or separate engine activation is required. The Node library is available from ${pkg.name}/engine.\n\nThe wrapper is MIT licensed. Bundled components retain their own licenses; see THIRD-PARTY-NOTICES.md and third-party/.\n`,
   )
-  lock.packages[rid] = { name: platform.name, version: pkg.version }
-  pkg.optionalDependencies[platform.name] = pkg.version
+  lock.packages[rid] = { name: platform.name, version: engineVersion }
+  pkg.optionalDependencies[platform.name] = engineVersion
 }
 await writeFile(
   path.join(root, 'engine.lock.json'),
@@ -60,12 +62,14 @@ for (const name of Object.keys(npmLock.packages[''].optionalDependencies ?? {}))
   if (!Object.hasOwn(pkg.optionalDependencies, name))
     delete npmLock.packages[`node_modules/${name}`]
 npmLock.name = pkg.name
+npmLock.version = pkg.version
 npmLock.packages[''].name = pkg.name
+npmLock.packages[''].version = pkg.version
 npmLock.packages[''].optionalDependencies = pkg.optionalDependencies
 for (const platform of Object.values(platforms)) {
   npmLock.packages[`node_modules/${platform.name}`] = {
-    version: pkg.version,
-    resolved: `https://registry.npmjs.org/${platform.name}/-/${platform.name.split('/').at(-1)}-${pkg.version}.tgz`,
+    version: engineVersion,
+    resolved: `https://registry.npmjs.org/${platform.name}/-/${platform.name.split('/').at(-1)}-${engineVersion}.tgz`,
     optional: true,
     license: 'MIT',
     os: platform.os,

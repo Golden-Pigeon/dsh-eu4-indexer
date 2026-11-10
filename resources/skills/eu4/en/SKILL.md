@@ -79,8 +79,9 @@ the EU4 base game plus any loaded mods (built by `Eu4Indexer.Cli`). The index ha
 already resolved mod overrides and decoded localisation, and it carries a derived
 **reference graph** (`refs`) of how content connects.
 
-If the `eu4` tools are not available, tell the user to build an index and register
-the server (see "Setup" at the end) instead of guessing from training data.
+If game query tools are unavailable, use the DSH management tools below to check
+engine readiness, build an index and bind it to the current chat. Do not guess
+from training data or register another MCP server.
 
 **Call `describe_schema` once at the start** of a session to see which
 `entity_type` and `ref_kind` values exist, the languages present, and the DDL.
@@ -373,6 +374,6 @@ acquisition" or "forcibly revokes"? Until all three are answered, "impossible" i
 Database selection applies only to the current query session. Clients sharing a connection must include `_meta["eu4indexer/sessionId"]` on every tool call. A dedicated client may use `serve --query-session <id>`. Omission preserves legacy connection selection. Do not change another session's selection; release unused sessions with `close_query_session`.
 
 
-## DSH setup and sessions
+## DSH configuration and sessions
 
-Use `eu4_indexer_manage` with `state` / `list` to inspect available indexes and `bind` to set the current session default. Install the engine in the plugin panel, run `setup` for rules, and `index` to build indexes. Long operations return a task id; inspect `tasks` until terminal or cancel with `cancel_task`. Game queries use the `mcp__eu4__` tools. Database selection is isolated per session. Do not alter other sessions or use the upstream `install` command to register other clients.
+The engine and EU4/HOI4 game rules are installed and updated with the plugin. First call `eu4_indexer_tools` with `enabled: true` to load tools for this chat, then use `eu4_indexer_state` to check `engine.ready` and rules, then `eu4_indexer_list` to inspect indexes. Build with `eu4_indexer_index`, rebuild with `eu4_indexer_refresh`, and select the current chat default with `eu4_indexer_bind`. Builds return a task id; poll `eu4_indexer_tasks` until terminal, report failures, or cancel with `eu4_indexer_cancel_task`. Missing engine or rule files require reinstalling the plugin with optional dependencies enabled; correct configured external paths first. Game queries use `mcp__eu4__` tools. Database selection is isolated per session; do not alter other sessions or use upstream `install` to register other clients. Unload tools with `eu4_indexer_tools` and `enabled: false` when returning to unrelated work; background tasks and saved bindings remain. Load again after a host restart or chat restoration.

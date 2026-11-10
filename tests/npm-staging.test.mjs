@@ -30,10 +30,13 @@ async function fixture(t) {
   const packages = [
     '@goldenpigeon/dsh-eu4-indexer-engine-linux-x64',
     '@goldenpigeon/dsh-eu4-indexer',
-  ].map((name) => ({
+  ].map((name, index) => ({
     name,
-    version: '0.2.0',
-    archive: path.join(root, npmArchiveName(name, '0.2.0')),
+    version: index === 0 ? '0.4.0' : '0.2.0',
+    archive: path.join(
+      root,
+      npmArchiveName(name, index === 0 ? '0.4.0' : '0.2.0'),
+    ),
   }))
   for (const p of packages) await writeFile(p.archive, p.name)
   const calls = []
@@ -378,7 +381,7 @@ test(
         Buffer.from(attachment.data, 'base64'),
         await readFile(f.packages[index].archive),
       )
-      assert.equal(body['dist-tags'].latest, '0.2.0')
+      assert.equal(body['dist-tags'].latest, f.packages[index].version)
     }
     await assert.rejects(access(sentinel), { code: 'ENOENT' })
   },

@@ -71,7 +71,6 @@ export interface EngineResponses {
   detect: unknown
   index: unknown
   refresh: unknown
-  setup: unknown
   register: unknown
   remove: unknown
 }
@@ -149,15 +148,13 @@ export interface ServiceState {
 }
 export interface ManagementResponses extends Omit<
   EngineResponses,
-  'index' | 'refresh' | 'setup'
+  'index' | 'refresh'
 > {
   state: ServiceState
   tasks: Task[]
   cancel_task: Task
   index: Task
   refresh: Task
-  setup: Task
-  install_engine: Task
   configure: EngineStatus
   bind: { sessionId: string; index: string | null }
   unbind: { sessionId: string; index: string | null }
@@ -177,6 +174,8 @@ export interface EnginePackage {
 }
 export interface EngineManifest {
   apiVersion: number
+  engineVersion?: string
+  sourceTag?: string
   sourceCommit: string
   build?: { sdkVersion: string; sourcePathPolicy?: string }
   packages?: Record<string, EnginePackage>
@@ -191,6 +190,9 @@ export interface EngineReceipt extends EngineAsset {
   installedAt: string
 }
 export interface PlatformReceipt extends Omit<EngineManifest, 'assets'> {
+  formatVersion: 2
   rid: string
-  asset: EngineAsset
+  entryPoint: string
+  files: Record<string, string>
+  asset?: EngineAsset
 }

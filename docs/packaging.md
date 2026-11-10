@@ -29,7 +29,7 @@ initialize recursive submodules and prepare the pinned .NET SDK and pnpm. The
 contributor guide covers ordinary builds, type checks and real-engine tests;
 this section covers platform artifacts.
 
-Both the main entry and `./client` point into `dist/`. Packages ship JavaScript,
+The main entry, public `./engine` library and `./client` point into `dist/`. Packages ship JavaScript,
 declarations and source maps with embedded source, without a runtime compiler
 dependency. README, the contributor guide and `docs/` ship together so relative
 links work inside the package. See [code layout](architecture.md#code-layout) for
@@ -47,11 +47,19 @@ npm run test:dsh-rc1 -- --package
 npm run verify:package
 ```
 
+The platform package version matches the upstream engine release; the main plugin
+has an independent version. For example, plugin `0.1.1` depends on engine `0.4.0`
+through exact optional dependencies. Updating the plugin updates its engine too.
+
+After publishing an upstream release, pin its commit in the submodule and set
+`engine.lock.json`'s `engineVersion`, `sourceTag` and `sourceCommit` to that release.
 `prepare:engines` synchronizes all eight package versions, platform declarations
-and main-package dependencies. After a submodule update, also set
-`engine.lock.json`'s `sourceCommit` to the pinned commit. Builds require a clean
-submodule at that commit. Each RID's output is cleared before generating its
-self-contained engine, third-party notices, archive and `engine.json`. Hashes and
+and main-package dependencies from the locked engine version. Builds check that
+the version matches upstream `AppInfo.fs`, the tag identifies the pinned commit,
+and the submodule is clean. Each RID's output is cleared before generating its
+self-contained engine, third-party notices and `engine.json`. Complete publish
+files are copied directly into the platform package's `bin/` directory; there
+are no nested engine archives. Hashes and
 source identities are never reused from another RID. `global.json` and CI pin
 the same SDK, checked against `engine.lock.json` before building. Platform receipts
 record it; packing, release validation and installation reject old builds with
@@ -63,7 +71,7 @@ package packing does not require platform binaries, but skill and documentation
 generation checks the upstream commit and worktree against the engine lock.
 Platform-package prepack rejects missing, damaged or stale artifacts.
 `verify:release` requires all eight platform packages and checks platform
-metadata, archive hashes, pinned source, licenses, and the actual main package's
+metadata, every publish-file hash, pinned source, licenses, and the actual main package's
 engine lock, DSH metadata, entries and dependencies.
 
 Release checks also compare every code, skill, locale, license and documentation
@@ -76,29 +84,55 @@ alone are insufficient: source changes require repacking.
 `verify:package` serves real tarballs through a temporary read-only, loopback-only
 registry, then installs them with npm and pnpm in clean directories. It records
 binary requests and requires only the matching platform download. With lifecycle
-scripts disabled, it checks offline installation, verification, probing and
-first-time managed installation after clearing an external path. No packages are
+scripts disabled, it checks immediate offline use without any engine-install
+call, verification, probing, missing/damaged dependency refusal and returning
+to the packaged engine after clearing an external path. No packages are
 uploaded or published. Host peer auto-installation is disabled for this check;
 real Cordis/MCP integrations validate the official DSH peers.
 
-Managed-engine receipts bind source, API, SDK, RID and platform package version.
-Missing or mismatched receipts after an upgrade return `engine_update_required`;
-**Install / update managed engine** restores the installation and preserves
-databases. Installation tests damage each field, verify refusal and recovery, and
-confirm a matching installed engine still works after its optional package is
-removed.
+Format-2 `engine.json` receipts bind source, API, SDK and RID, record the
+`bin/eu4indexer` (Windows: `.exe`) entry point, and enumerate SHA-256 digests for
+every file in the publish tree. The library checks the package name and exact
+version against `engine.lock.json`, rejects links and unsafe inventory paths,
+and validates the complete tree before use. File digests are cached only while
+filesystem identity, size, modification time and change time are unchanged.
+Release validation also rejects extra platform files and verifies that notices
+duplicated outside `bin/` are complete and identical.
+Missing or mismatched packages require npm dependency repair; an old copy in
+`home/engine/current` cannot satisfy or override the new dependency.
+
+`Engine` is available from `@goldenpigeon/dsh-eu4-indexer/engine` for Node callers.
+It has typed management requests, cancellation/progress options and
+`querySession({ database, sessionId })` launch configurations. It does not import
+DSH at runtime. A host owns each query transport and must preserve separate
+session identities. External executables remain supported through
+`executablePath`; their updates belong to the caller.
+
+```ts
+import { Engine } from '@goldenpigeon/dsh-eu4-indexer/engine'
+
+const engine = new Engine({ home: '/data/eu4-indexer' })
+const registry = await engine.call({ operation: 'list' })
+const launch = await engine.querySession({
+  database: registry.databases[0].path,
+  sessionId: 'chat-1',
+})
+// Pass launch to the host's stdio MCP client for this session.
+```
+
+Choose an existing index before constructing its query session. Index creation,
+refresh and other management operations use the same `call()` interface.
 
 Engines compile from Git-tracked source staged outside personal home directories,
 preventing F# assemblies from embedding personal source paths. Receipt
-`sourcePathPolicy` is checked during installation and release validation. Tar
-archives clear owner names, set UID/GID to zero and disable extended attributes;
-ZIP archives created on Unix omit owner extension fields. Set
+`sourcePathPolicy` is checked before use and in release validation. npm creates
+the single outer package archive; there is no runtime extraction. Set
 `DSH_EU4_BUILD_TEMP` to select a neutral staging directory. See
 [privacy review](privacy.md) for scope and retained historical content.
 
 ## Local installation
 
-The main package depends on same-version platform packages and does
+The main package depends on exact upstream-version platform packages and does
 not contain binaries itself. Its tarball alone is not a complete offline bundle.
 Pack it and the target platform package as above, then start the read-only local
 registry:
@@ -140,8 +174,8 @@ Builds enumerate dependencies from NuGet assets and collect pinned full license
 snapshots, package notices, copyright and author information. They also retain
 full CWTools, eu4-indexer and .NET runtime licenses and third-party notices.
 Unregistered dependencies or snapshot-hash mismatches fail the build. Inventories
-and full texts are included in both platform npm packages and internal engine
-archives, and remain after installation. `resources/third-party/sources.json`
+and full texts are included in the platform npm packages and their `bin/` publish
+trees, and remain after installation. `resources/third-party/sources.json`
 records snapshot sources and hashes.
 
 `npm run audit:engine` checks direct and transitive NuGet dependencies. Advisories
@@ -176,3 +210,12 @@ and pull requests build and test only; they never trigger staging.
 See [publishing](publishing.md) for version preparation, manual triggers,
 credentials and recovery. Prepare and rebuild artifacts for each version change.
 An already published package version cannot be replaced.
+
+## Bundled game rules
+
+The upstream submodule recursively pins CWTools and both game-rule repositories.
+Neutral source staging includes all three nested submodules. Every platform
+package includes both complete rule trees under `bin/rules/<game>/`; the engine
+receipt hashes these files alongside runtime files. Both rule repositories' MIT
+licenses are retained in the bundle and third-party notices. Rule updates require
+a submodule pin change and engine rebuild, then travel with the plugin dependency.

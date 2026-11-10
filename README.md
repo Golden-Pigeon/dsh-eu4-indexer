@@ -2,7 +2,7 @@
 
 Manage and query **Europa Universalis IV** and **Hearts of Iron IV** game and mod
 scripts in DeepSeek Harness.
-Build indexes, manage CWTools rules, track background jobs, and query each chat's
+Build indexes with bundled CWTools rules, track background jobs, and query each chat's
 selected database through MCP. Parsing and game queries come from
 [eu4-indexer](https://github.com/Golden-Pigeon/eu4-indexer), pinned as a git
 submodule.
@@ -20,8 +20,8 @@ submodule.
 ## Architecture
 
 The upstream engine provides the parser, database model, management protocol and
-MCP query tools. This repository adds the DSH plugin, a TypeScript/TSX management
-UI, background tasks and chat connections. Each chat uses an independent official
+MCP query tools. This repository adds a reusable TypeScript engine library, the DSH plugin,
+a TypeScript/TSX management UI, background tasks and chat connections. Each chat uses an independent official
 DSH MCP client to select its database. See [docs/architecture.md](docs/architecture.md)
 for the layout, lifecycle and concurrency model.
 
@@ -33,6 +33,8 @@ for the layout, lifecycle and concurrency model.
   browse paginated parse errors with file locations.
 - **Background tasks** — persistent progress and results, queuing, cancellation
   and interrupted-task recovery. Failed rebuilds preserve the previous index.
+- **On-demand tools** — one short loader per chat; management and query schemas
+  appear only after activation and can be unloaded.
 - **Chat isolation** — independent default indexes with all upstream
   `mcp__eu4__…` query tools.
 - **English / Chinese skills** — the model chooses the appropriate EU4 or HOI4
@@ -53,8 +55,13 @@ into your DSH profile:
 dsh plugin --profile web add @goldenpigeon/dsh-eu4-indexer
 ```
 
+For Desktop's bundled CLI and migration from local unscoped builds, see the
+[installation guide](docs/installation.md).
+
 Exact-version optional dependencies select the engine package for the host's OS,
-CPU and libc, downloading only the matching binary by default. To build from
+CPU and libc, downloading only the matching binary by default. The engine is
+ready with the plugin and updates with it; no separate engine installation or
+activation is required. To build from
 source, see [CONTRIBUTING.md](CONTRIBUTING.md); for local artifacts, see
 [local installation](docs/packaging.md#local-installation).
 
@@ -62,22 +69,25 @@ source, see [CONTRIBUTING.md](CONTRIBUTING.md); for local artifacts, see
 
 Open the plugin's **Game script indexes** configuration page:
 
-1. In **Engine & settings**, install the managed engine and download the rules
-   for the games you need.
-2. Select a game, mods and an index name, preview the sources, then build.
-3. Bind an index to a chat and ask about events, missions, focuses, conditions,
+The engine and both games' rules are already available after installation.
+
+1. Select a game, mods and an index name, preview the sources, then build.
+2. Bind an index to a chat and ask about events, missions, focuses, conditions,
    modifiers or game goals.
 
-The `eu4_indexer_manage` tool also manages indexes. `/eu4` and `/hoi4` are explicit
+The model loads independent `eu4_indexer_*` tools on demand through
+`eu4_indexer_tools`. `/eu4` and `/hoi4` are explicit
 skill entry points. Configuration, tasks, chat selection and upgrades are covered
 in the [usage guide](docs/usage.md); operation parameters are in the
 [management reference](docs/management.md).
 
 ## Documentation
 
-- [Usage Guide](docs/usage.md) — configuration, engine and rule setup, indexes,
+- [Installation](docs/installation.md) — Web and Desktop commands, including
+  migration from local unscoped packages.
+- [Usage Guide](docs/usage.md) — configuration, bundled engine and rules, indexes,
   tasks, chat bindings and skill languages.
-- [Management Reference](docs/management.md) — `eu4_indexer_manage` operations,
+- [Management Reference](docs/management.md) — independent management tools,
   parameters and task results.
 - [Project Structure & Architecture](docs/architecture.md) — modules, lifecycle,
   concurrency and data boundaries.
@@ -102,7 +112,9 @@ validation and the submodule update workflow.
 
 This plugin is licensed under [MIT](LICENSE). The indexing engine comes from
 [eu4-indexer](https://github.com/Golden-Pigeon/eu4-indexer), with script parsing
-provided by [CWTools](https://github.com/cwtools/cwtools). The
+provided by [CWTools](https://github.com/cwtools/cwtools). Bundled game rules come
+from [EU4 config](https://github.com/cwtools/cwtools-eu4-config) and
+[HOI4 config](https://github.com/cwtools/cwtools-hoi4-config), both under MIT. The
 [upstream license](resources/UPSTREAM-LICENSE) and full engine third-party notices
 are included in the packages. Game files, mods and user-generated databases are
 not distributed in the npm packages.

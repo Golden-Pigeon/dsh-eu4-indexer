@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.1.1 — 2026-11-10
+
+- Version all eight platform binary packages with upstream engine `0.4.0`,
+  independently of plugin `0.1.1`. Pin the upstream release and verify source
+  version, exact dependencies, mixed-version release receipts and upgrades.
+
+- Propagate chat-tool activation cancellation to registry requests and MCP startup,
+  and await client/query cleanup when shutdown overlaps an unload.
+
+- Load management and MCP query tools on demand per chat through
+  `eu4_indexer_tools`, using original DSH rc.1 conditional tool registration.
+  Unloading retains background jobs and defaults; restored chats start unloaded.
+
+- Bundle both games' pinned rule repositories inside the engine. Remove upstream
+  `setup`, plugin rule downloads and `install_engine`; refresh default rules from
+  the current engine while retaining explicit external directories.
+- Replace `eu4_indexer_manage` with 16 independent management tools, preserving
+  chat isolation, task handling and the existing query tool set.
+
+- Expose a DSH-independent TypeScript engine library at `@goldenpigeon/dsh-eu4-indexer/engine`; plugin management and session launch use it directly.
+- Install and update the engine with the plugin through exact-version platform dependencies. Ship complete .NET publish directories, verify all file hashes, and remove the separate engine activation requirement. Preserve external engines, data and session isolation.
+- Keep management `state` output valid lossless JSON when an engine is unavailable by omitting the absent environment field.
+
+- Document Desktop's bundled CLI and migration from the unpublished local package name to `@goldenpigeon/dsh-eu4-indexer`, including the stale-dependency 404.
+
 ## 0.1.0 — 2026-11-10
 
 - Upload platform engines separately from the tested Linux x64 main package, preventing concurrent same-name writes during CI release-set aggregation.
