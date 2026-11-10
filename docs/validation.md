@@ -54,6 +54,10 @@ failure: CRLF input prevented replacement of obsolete setup instructions. The
 generator now normalizes upstream line endings first. A regression compares LF
 and CRLF input for all four actual game/language skills and first failed against
 the preceding generator. Evidence is in `artifacts/release-011-crlf-before.log`.
+Both Windows architectures then passed all six original rc.1 package integrations
+but exposed a validator comparing normalized engine paths with a native-separator
+prefix. Installation verification now compares the canonical absolute entry-point
+files, retaining the requirement to use the exact installed dependency binary.
 
 ## On-demand chat tools
 
