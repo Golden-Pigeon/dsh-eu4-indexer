@@ -97,14 +97,14 @@
     "url": "https://github.com/Golden-Pigeon/dsh-eu4-indexer.git"
   },
   "optionalDependencies": {
-    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-x64": "0.4.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-arm64": "0.4.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-win32-x64": "0.4.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64": "0.4.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-x64": "0.4.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-arm64": "0.4.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-x64": "0.4.0",
-    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-arm64": "0.4.0"
+    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-x64": "0.4.1",
+    "@goldenpigeon/dsh-eu4-indexer-engine-darwin-arm64": "0.4.1",
+    "@goldenpigeon/dsh-eu4-indexer-engine-win32-x64": "0.4.1",
+    "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64": "0.4.1",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-x64": "0.4.1",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-arm64": "0.4.1",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-x64": "0.4.1",
+    "@goldenpigeon/dsh-eu4-indexer-engine-linux-musl-arm64": "0.4.1"
   },
   "overrides": {
     "@modelcontextprotocol/client": "2.3.0",
