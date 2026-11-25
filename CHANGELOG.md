@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.3 — 2026-11-25
+
 - Update the bundled engine to handle Chinese playset names on Windows,
   index repeated inline modifiers across blocks, read quoted and unquoted
   names in BOM-less UTF-8 scripts, and find short localisation substrings
