@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Update the bundled engine to handle Chinese playset names on Windows,
+  index repeated inline modifiers across blocks, read quoted and unquoted
+  names in BOM-less UTF-8 scripts, and find short localisation substrings
+  such as `归墟` and accented terms.
+
 ## 0.1.2 — 2026-11-11
 
 - Use the upstream CLI's `~/.eu4indexer` directory by default, sharing its index
