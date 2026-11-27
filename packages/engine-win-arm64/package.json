@@ -1,6 +1,6 @@
 {
   "name": "@goldenpigeon/dsh-eu4-indexer-engine-win32-arm64",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Self-contained EU4/HOI4 indexer engine for win-arm64.",
   "license": "MIT",
   "author": "Golden-Pigeon",

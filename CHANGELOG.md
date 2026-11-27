@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.4 — 2026-11-27
+
+- Bundle engine v0.4.2 on all platforms. EU4 now resolves playset file
+  conflicts using the game's dependency ranks and descriptor names. Refresh
+  existing EU4 playset indexes to apply the corrected file precedence.
+- Show where to find effective load order in DSH. Incomplete or ambiguous EU4
+  launcher selections now report an error before replacing an index.
+
 ## 0.1.3 — 2026-11-25
 
 - Update the bundled engine to handle Chinese playset names on Windows,
