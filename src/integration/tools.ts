@@ -63,7 +63,7 @@ export const managementTools = [
   {
     operation: 'detect',
     description:
-      'Preview a game and its selected mods in load order before indexing. game defaults to eu4.',
+      'Preview the resolved game and the mod load order that indexing will use. game defaults to eu4.',
     fields: discovery,
   },
   {
@@ -75,7 +75,7 @@ export const managementTools = [
   {
     operation: 'playsets',
     description:
-      'List launcher playsets and their ordered mods for the selected game (default eu4).',
+      'List launcher playsets with enabled flags and launcher display positions (default game eu4). Use eu4_indexer_detect for the load order used by indexing.',
     fields: ['game'],
   },
   {
